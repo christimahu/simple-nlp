@@ -1,0 +1,17 @@
+# @file cmake/NLPSentimentConfig.cmake.in
+# @brief Template for the CMake package configuration file
+# 
+# This file is used as a template to generate the package configuration
+# file when installing the NLP sentiment analysis library.
+
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/NLPSentimentTargets.cmake")
+
+# Check for required dependencies
+include(CMakeFindDependencyMacro)
+
+# Add additional dependencies if needed
+# find_dependency(Threads)
+
+check_required_components(NLPSentiment)

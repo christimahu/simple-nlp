@@ -37,23 +37,15 @@ TfidfVectorizer::TfidfVectorizer(bool sublinearTf, double maxDf, size_t maxFeatu
  * @return Vector of tokens (words)
  */
 std::vector<std::string> TfidfVectorizer::tokenize(std::string_view text) const {
-    // Recursive approach to tokenization
-    const auto tokenizeHelper = [](std::istringstream& ss, std::vector<std::string>& tokens) -> void {
-        std::string token;
-        
-        // Base case: no more tokens to extract
-        if (!(ss >> token)) {
-            return;
-        }
-        
-        // Add token and recursively process the rest
-        tokens.push_back(token);
-        tokenizeHelper(ss, tokens);
-    };
-    
+    // Simple tokenization approach
     std::vector<std::string> tokens;
-    std::istringstream ss{std::string{text}};
-    tokenizeHelper(ss, tokens);
+    std::istringstream iss{std::string{text}};
+    std::string token;
+    
+    // Extract tokens one by one
+    while (iss >> token) {
+        tokens.push_back(token);
+    }
     
     return tokens;
 }
@@ -73,28 +65,17 @@ void TfidfVectorizer::buildVocabulary(const std::vector<std::string_view>& texts
     documentFrequencies.clear();
     documentCount = texts.size();
     
-    // Process document frequencies using recursion
-    const auto processTexts = [this](auto& self, const auto& texts, size_t index) -> void {
-        // Base case: all texts processed
-        if (index >= texts.size()) {
-            return;
-        }
-        
+    // Process document frequencies
+    for (const auto& text : texts) {
         // Get unique tokens in this document
-        auto tokens = tokenize(texts[index]);
+        auto tokens = tokenize(text);
         std::set<std::string> uniqueTokens(tokens.begin(), tokens.end());
         
         // Increment document frequency for each unique token
         for (const auto& token : uniqueTokens) {
             documentFrequencies[token]++;
         }
-        
-        // Recursively process the next document
-        self(self, texts, index + 1);
-    };
-    
-    // Start the recursive processing
-    processTexts(processTexts, texts, 0);
+    }
     
     // Filter terms by document frequency and prepare for sorting
     std::vector<std::pair<std::string, size_t>> termFrequencies;
@@ -146,42 +127,19 @@ std::unordered_map<std::string, double> TfidfVectorizer::computeTfIdf(std::strin
         return result;
     }
     
-    // Count term frequencies in this document using recursion
-    const auto countTerms = [](auto& self, const auto& tokens, size_t index, 
-                              std::unordered_map<std::string, size_t>& counts) -> void {
-        // Base case: all tokens processed
-        if (index >= tokens.size()) {
-            return;
-        }
-        
-        // Increment count for this token
-        counts[tokens[index]]++;
-        
-        // Recursively process the next token
-        self(self, tokens, index + 1, counts);
-    };
-    
-    // Get tokens and count frequencies
-    auto tokens = tokenize(text);
+    // Count term frequencies in this document
     std::unordered_map<std::string, size_t> termCounts;
-    countTerms(countTerms, tokens, 0, termCounts);
+    auto tokens = tokenize(text);
+    
+    for (const auto& token : tokens) {
+        // Only count tokens in our vocabulary
+        if (vocabulary.find(token) != vocabulary.end()) {
+            termCounts[token]++;
+        }
+    }
     
     // Compute TF-IDF for each term in the vocabulary
-    const auto computeScores = [this](auto& self, const auto& termCounts, 
-                                   auto iter, std::unordered_map<std::string, double>& scores) -> void {
-        // Base case: all terms processed
-        if (iter == termCounts.end()) {
-            return;
-        }
-        
-        const auto& [term, count] = *iter;
-        
-        // Skip terms not in our vocabulary
-        if (!vocabulary.contains(term)) {
-            self(self, termCounts, std::next(iter), scores);
-            return;
-        }
-        
+    for (const auto& [term, count] : termCounts) {
         // Calculate term frequency
         double tf = static_cast<double>(count);
         
@@ -198,14 +156,8 @@ std::unordered_map<std::string, double> TfidfVectorizer::computeTfIdf(std::strin
         double idf = std::log(static_cast<double>(documentCount) / (1.0 + df)) + 1.0;
         
         // Store TF-IDF score
-        scores[term] = tf * idf;
-        
-        // Recursively process the next term
-        self(self, termCounts, std::next(iter), scores);
-    };
-    
-    // Start the recursive computation
-    computeScores(computeScores, termCounts, termCounts.begin(), result);
+        result[term] = tf * idf;
+    }
     
     return result;
 }

@@ -31,4 +31,8 @@
 *.out
 *.app
 
+# Build files
+build
+
+# Mac OS X Finder
 .DS_Store

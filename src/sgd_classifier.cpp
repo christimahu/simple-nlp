@@ -39,8 +39,7 @@ SGDClassifier::SGDClassifier(const std::string& loss,
  * Trains the classifier on training data using SGD algorithm.
  * 
  * This method implements the Stochastic Gradient Descent algorithm
- * for training a binary classifier, using a functional approach with
- * recursion rather than traditional loops.
+ * for training a binary classifier, using a functional approach.
  * 
  * @param X Training feature matrix
  * @param y Training labels
@@ -56,40 +55,25 @@ void SGDClassifier::fit(const std::vector<std::vector<double>>& X, const std::ve
     const size_t nFeatures = X[0].size();
     
     // Initialize weights with small random values
-    auto initializeWeights = [nFeatures]() {
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::normal_distribution<> dist(0.0, 0.01);
-        
-        std::vector<double> weights(nFeatures);
-        std::ranges::generate(weights, [&dist, &gen]() { return dist(gen); });
-        return weights;
-    };
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::normal_distribution<> dist(0.0, 0.01);
     
-    weights = initializeWeights();
+    weights.resize(nFeatures);
+    std::ranges::generate(weights, [&dist, &gen]() { return dist(gen); });
     intercept = 0.0;
     
     // Count class frequencies
-    auto countClasses = [](const std::vector<int>& labels) {
-        std::unordered_map<int, size_t> counts;
-        for (int label : labels) {
-            counts[label]++;
-        }
-        return counts;
-    };
-    
-    auto classCounts = countClasses(y);
+    std::unordered_map<int, size_t> classCounts;
+    for (int label : y) {
+        classCounts[label]++;
+    }
     
     // Compute class weights inversely proportional to frequencies
-    auto computeClassWeights = [&y, &classCounts]() {
-        std::unordered_map<int, double> weights;
-        for (const auto& [label, count] : classCounts) {
-            weights[label] = static_cast<double>(y.size()) / (classCounts.size() * count);
-        }
-        return weights;
-    };
-    
-    auto classWeights = computeClassWeights();
+    std::unordered_map<int, double> classWeights;
+    for (const auto& [label, count] : classCounts) {
+        classWeights[label] = static_cast<double>(y.size()) / (classCounts.size() * count);
+    }
     
     // Print class distribution and weights
     std::cout << "Class distribution in training data:" << std::endl;
@@ -99,14 +83,9 @@ void SGDClassifier::fit(const std::vector<std::vector<double>>& X, const std::ve
     }
     
     // Convert sentiment labels to binary (-1/1) for SGD
-    auto convertLabels = [](const std::vector<int>& labels) {
-        std::vector<int> binaryLabels(labels.size());
-        std::ranges::transform(labels, binaryLabels.begin(), 
-                            [](int label) { return (label == 0) ? -1 : 1; });
-        return binaryLabels;
-    };
-    
-    auto binaryY = convertLabels(y);
+    std::vector<int> binaryY(y.size());
+    std::ranges::transform(y, binaryY.begin(), 
+                        [](int label) { return (label == 0) ? -1 : 1; });
     
     // Number of epochs for training
     const int nEpochs = 10;
@@ -118,19 +97,12 @@ void SGDClassifier::fit(const std::vector<std::vector<double>>& X, const std::ve
     // Use a smaller initial learning rate for stability
     const double initialEta = 0.001;
     
-    // Recursive function to process one epoch
-    const auto processEpoch = [&](auto& self, int epoch, const std::vector<size_t>& shuffledIndices) -> void {
-        // Base case: all epochs processed
-        if (epoch >= nEpochs) {
-            return;
-        }
-        
+    // Training loop for epochs
+    for (int epoch = 0; epoch < nEpochs; ++epoch) {
         // Create a copy of indices for shuffling
-        auto currIndices = shuffledIndices;
+        auto currIndices = indices;
         
         // Shuffle indices
-        std::random_device rd;
-        std::mt19937 gen(rd());
         std::shuffle(currIndices.begin(), currIndices.end(), gen);
         
         // Calculate learning rate for this epoch
@@ -138,41 +110,26 @@ void SGDClassifier::fit(const std::vector<std::vector<double>>& X, const std::ve
                      initialEta / (1.0 + alpha * initialEta * static_cast<double>(epoch)) :
                      initialEta;
         
-        // Recursive function to process one sample
-        const auto processSample = [&](auto& self, size_t index, int& misclassified, double& totalLoss) -> void {
-            // Base case: all samples processed
-            if (index >= currIndices.size()) {
-                return;
-            }
-            
-            const size_t idx = currIndices[index];
+        // Track statistics for this epoch
+        int misclassified = 0;
+        double totalLoss = 0.0;
+        
+        // Process each sample
+        for (size_t idx : currIndices) {
             const auto& xi = X[idx];
             const int target = binaryY[idx];
             
             // Skip if feature vector is empty
             if (xi.empty()) {
-                self(self, index + 1, misclassified, totalLoss);
-                return;
+                continue;
             }
             
             // Calculate prediction using dot product
-            const auto dotProduct = [](const auto& a, const auto& b, double bias) {
-                // Base case for recursive dot product
-                const auto dotProductHelper = [](auto& self, const auto& a, const auto& b, 
-                                             size_t index, double sum) -> double {
-                    // Base case: all elements processed
-                    if (index >= a.size() || index >= b.size()) {
-                        return sum;
-                    }
-                    
-                    // Add product of current elements to sum and recurse
-                    return self(self, a, b, index + 1, sum + a[index] * b[index]);
-                };
-                
-                return dotProductHelper(dotProductHelper, a, b, 0, bias);
-            };
-            
-            const double prediction = dotProduct(xi, weights, intercept);
+            double prediction = 0.0;
+            for (size_t j = 0; j < std::min(weights.size(), xi.size()); ++j) {
+                prediction += weights[j] * xi[j];
+            }
+            prediction += intercept;
             
             // Apply class weight to learning rate
             const double sampleEta = eta * classWeights[y[idx]];
@@ -194,29 +151,16 @@ void SGDClassifier::fit(const std::vector<std::vector<double>>& X, const std::ve
                     const double multiplier = (target * prediction < -1.0) ? 
                                           -target : target * (1.0 - target * prediction);
                     
-                    // Recursive function to update weights
-                    const auto updateWeights = [&](auto& self, size_t idx) -> void {
-                        // Base case: all weights updated
-                        if (idx >= weights.size()) {
-                            return;
-                        }
-                        
-                        // Skip if feature index is out of bounds
-                        if (idx >= xi.size()) {
-                            // Just apply regularization
-                            weights[idx] *= (1.0 - sampleEta * alpha);
+                    // Update weights with gradient and regularization
+                    for (size_t j = 0; j < weights.size(); ++j) {
+                        if (j < xi.size()) {
+                            weights[j] = (1.0 - sampleEta * alpha) * weights[j] +
+                                       sampleEta * multiplier * xi[j];
                         } else {
-                            // Update with gradient and regularization
-                            weights[idx] = (1.0 - sampleEta * alpha) * weights[idx] +
-                                         sampleEta * multiplier * xi[idx];
+                            // Just apply regularization
+                            weights[j] *= (1.0 - sampleEta * alpha);
                         }
-                        
-                        // Recursively update next weight
-                        self(self, idx + 1);
-                    };
-                    
-                    // Start the recursive weight update
-                    updateWeights(updateWeights, 0);
+                    }
                     
                     // Update intercept (no regularization on intercept)
                     intercept += sampleEta * multiplier;
@@ -227,49 +171,23 @@ void SGDClassifier::fit(const std::vector<std::vector<double>>& X, const std::ve
                     }
                 } else {
                     // Apply regularization only if margin is satisfied
-                    // Recursive function to apply regularization
-                    const auto applyRegularization = [&](auto& self, size_t idx) -> void {
-                        // Base case: all weights updated
-                        if (idx >= weights.size()) {
-                            return;
-                        }
-                        
-                        // Apply weight decay
-                        weights[idx] *= (1.0 - sampleEta * alpha);
-                        
-                        // Recursively update next weight
-                        self(self, idx + 1);
-                    };
-                    
-                    // Start the recursive regularization
-                    applyRegularization(applyRegularization, 0);
+                    for (size_t j = 0; j < weights.size(); ++j) {
+                        weights[j] *= (1.0 - sampleEta * alpha);
+                    }
                 }
             } else {
                 // Hinge loss (SVM)
                 if (target * prediction < 1.0) {
-                    // Recursive function to update weights
-                    const auto updateWeights = [&](auto& self, size_t idx) -> void {
-                        // Base case: all weights updated
-                        if (idx >= weights.size()) {
-                            return;
-                        }
-                        
-                        // Skip if feature index is out of bounds
-                        if (idx >= xi.size()) {
-                            // Just apply regularization
-                            weights[idx] *= (1.0 - sampleEta * alpha);
+                    // Update weights with gradient and regularization
+                    for (size_t j = 0; j < weights.size(); ++j) {
+                        if (j < xi.size()) {
+                            weights[j] = (1.0 - sampleEta * alpha) * weights[j] +
+                                       sampleEta * target * xi[j];
                         } else {
-                            // Update with gradient and regularization
-                            weights[idx] = (1.0 - sampleEta * alpha) * weights[idx] +
-                                         sampleEta * target * xi[idx];
+                            // Just apply regularization
+                            weights[j] *= (1.0 - sampleEta * alpha);
                         }
-                        
-                        // Recursively update next weight
-                        self(self, idx + 1);
-                    };
-                    
-                    // Start the recursive weight update
-                    updateWeights(updateWeights, 0);
+                    }
                     
                     // Update intercept
                     intercept += sampleEta * target;
@@ -280,33 +198,12 @@ void SGDClassifier::fit(const std::vector<std::vector<double>>& X, const std::ve
                     }
                 } else {
                     // Apply regularization only
-                    // Recursive function to apply regularization
-                    const auto applyRegularization = [&](auto& self, size_t idx) -> void {
-                        // Base case: all weights updated
-                        if (idx >= weights.size()) {
-                            return;
-                        }
-                        
-                        // Apply weight decay
-                        weights[idx] *= (1.0 - sampleEta * alpha);
-                        
-                        // Recursively update next weight
-                        self(self, idx + 1);
-                    };
-                    
-                    // Start the recursive regularization
-                    applyRegularization(applyRegularization, 0);
+                    for (size_t j = 0; j < weights.size(); ++j) {
+                        weights[j] *= (1.0 - sampleEta * alpha);
+                    }
                 }
             }
-            
-            // Process next sample
-            self(self, index + 1, misclassified, totalLoss);
-        };
-        
-        // Process all samples in this epoch
-        int misclassified = 0;
-        double totalLoss = 0.0;
-        processSample(processSample, 0, misclassified, totalLoss);
+        }
         
         // Print training progress
         const double errorRate = static_cast<double>(misclassified) / y.size();
@@ -317,34 +214,24 @@ void SGDClassifier::fit(const std::vector<std::vector<double>>& X, const std::ve
                  << ", Error rate: " << errorRate
                  << ", Average loss: " << avgLoss
                  << std::endl;
-        
-        // Process next epoch
-        self(self, epoch + 1, currIndices);
-    };
-    
-    // Start the recursive epoch processing
-    processEpoch(processEpoch, 0, indices);
+    }
     
     // Print weight statistics
-    auto weightStats = [&weights]() {
-        // Calculate stats using STL algorithms
-        const double sum = std::accumulate(weights.begin(), weights.end(), 0.0);
-        const double absSum = std::accumulate(weights.begin(), weights.end(), 0.0,
-                                         [](double acc, double w) { return acc + std::abs(w); });
-        
-        // Find max absolute weight
-        const auto maxAbsElem = std::max_element(weights.begin(), weights.end(),
-                                           [](double a, double b) { return std::abs(a) < std::abs(b); });
-        const double maxAbs = (maxAbsElem != weights.end()) ? std::abs(*maxAbsElem) : 0.0;
-        
-        // Count nonzero weights
-        const size_t nonzeroCount = std::count_if(weights.begin(), weights.end(),
-                                              [](double w) { return std::abs(w) > 1e-5; });
-        
-        return std::make_tuple(sum / weights.size(), absSum / weights.size(), maxAbs, nonzeroCount);
-    };
+    const double sum = std::accumulate(weights.begin(), weights.end(), 0.0);
+    const double avgWeight = sum / weights.size();
     
-    auto [avgWeight, avgAbsWeight, maxAbsWeight, nonzeroCount] = weightStats();
+    const double absSum = std::accumulate(weights.begin(), weights.end(), 0.0,
+                                     [](double acc, double w) { return acc + std::abs(w); });
+    const double avgAbsWeight = absSum / weights.size();
+    
+    // Find max absolute weight
+    const auto maxAbsElem = std::max_element(weights.begin(), weights.end(),
+                                       [](double a, double b) { return std::abs(a) < std::abs(b); });
+    const double maxAbsWeight = (maxAbsElem != weights.end()) ? std::abs(*maxAbsElem) : 0.0;
+    
+    // Count nonzero weights
+    const size_t nonzeroCount = std::count_if(weights.begin(), weights.end(),
+                                          [](double w) { return std::abs(w) > 1e-5; });
     
     std::cout << "Weight statistics:" << std::endl;
     std::cout << "Average weight: " << avgWeight << std::endl;
@@ -364,48 +251,21 @@ void SGDClassifier::fit(const std::vector<std::vector<double>>& X, const std::ve
  * @return Vector of predicted labels
  */
 std::vector<int> SGDClassifier::predict(const std::vector<std::vector<double>>& X) const {
-    // Recursive approach to prediction
-    const auto predictRecursive = [this](auto& self, const auto& X, size_t index, std::vector<int>& predictions) -> void {
-        // Base case: all samples processed
-        if (index >= X.size()) {
-            return;
-        }
-        
-        const auto& x = X[index];
-        
-        // Skip if feature vector is empty
-        if (x.empty()) {
-            predictions.push_back(0);  // Default to negative class
-            self(self, X, index + 1, predictions);
-            return;
-        }
-        
+    std::vector<int> predictions;
+    predictions.reserve(X.size());
+    
+    for (const auto& x : X) {
         // Calculate decision value
         double decision = 0.0;
         
-        // Calculate the dot product recursively
-        const auto calculateDecision = [&](auto& self, size_t featureIdx, double sum) -> double {
-            // Base case: all features processed
-            if (featureIdx >= weights.size() || featureIdx >= x.size()) {
-                return sum + intercept;
-            }
-            
-            // Add this feature's contribution and recurse
-            return self(self, featureIdx + 1, sum + weights[featureIdx] * x[featureIdx]);
-        };
-        
-        decision = calculateDecision(calculateDecision, 0, 0.0);
+        for (size_t i = 0; i < std::min(weights.size(), x.size()); ++i) {
+            decision += weights[i] * x[i];
+        }
+        decision += intercept;
         
         // Convert to sentiment class (0=negative, 4=positive)
         predictions.push_back(decision >= 0.0 ? 4 : 0);
-        
-        // Process next sample
-        self(self, X, index + 1, predictions);
-    };
-    
-    std::vector<int> predictions;
-    predictions.reserve(X.size());
-    predictRecursive(predictRecursive, X, 0, predictions);
+    }
     
     return predictions;
 }
@@ -420,37 +280,17 @@ std::vector<int> SGDClassifier::predict(const std::vector<std::vector<double>>& 
  * @return Vector of decision function values
  */
 std::vector<double> SGDClassifier::decisionFunction(const std::vector<std::vector<double>>& X) const {
-    // Recursive approach to calculating decision values
-    const auto decisionRecursive = [this](auto& self, const auto& X, size_t index, std::vector<double>& decisions) -> void {
-        // Base case: all samples processed
-        if (index >= X.size()) {
-            return;
-        }
-        
-        const auto& x = X[index];
-        
-        // Skip if feature vector is empty
-        if (x.empty()) {
-            decisions.push_back(0.0);
-            self(self, X, index + 1, decisions);
-            return;
-        }
-        
+    std::vector<double> decisions;
+    decisions.reserve(X.size());
+    
+    for (const auto& x : X) {
         // Calculate decision value
         double decision = 0.0;
         
-        // Calculate the dot product recursively
-        const auto calculateDecision = [&](auto& self, size_t featureIdx, double sum) -> double {
-            // Base case: all features processed
-            if (featureIdx >= weights.size() || featureIdx >= x.size()) {
-                return sum + intercept;
-            }
-            
-            // Add this feature's contribution and recurse
-            return self(self, featureIdx + 1, sum + weights[featureIdx] * x[featureIdx]);
-        };
-        
-        decision = calculateDecision(calculateDecision, 0, 0.0);
+        for (size_t i = 0; i < std::min(weights.size(), x.size()); ++i) {
+            decision += weights[i] * x[i];
+        }
+        decision += intercept;
         
         // Apply scaling to prevent extreme values
         if (std::abs(decision) > 10.0) {
@@ -458,14 +298,7 @@ std::vector<double> SGDClassifier::decisionFunction(const std::vector<std::vecto
         }
         
         decisions.push_back(decision);
-        
-        // Process next sample
-        self(self, X, index + 1, decisions);
-    };
-    
-    std::vector<double> decisions;
-    decisions.reserve(X.size());
-    decisionRecursive(decisionRecursive, X, 0, decisions);
+    }
     
     return decisions;
 }
@@ -486,22 +319,13 @@ double SGDClassifier::score(const std::vector<std::vector<double>>& X, const std
     // Get predictions
     std::vector<int> predictions = predict(X);
     
-    // Recursive approach to counting correct predictions
-    const auto countCorrect = [](auto& self, const auto& pred, const auto& actual, 
-                              size_t index, size_t correct) -> size_t {
-        // Base case: all predictions checked
-        if (index >= pred.size()) {
-            return correct;
+    // Count correct predictions
+    size_t correct = 0;
+    for (size_t i = 0; i < predictions.size(); ++i) {
+        if (predictions[i] == y[i]) {
+            correct++;
         }
-        
-        // Increment correct count if prediction matches actual
-        size_t newCorrect = correct + (pred[index] == actual[index] ? 1 : 0);
-        
-        // Recursively check next prediction
-        return self(self, pred, actual, index + 1, newCorrect);
-    };
-    
-    size_t correct = countCorrect(countCorrect, predictions, y, 0, 0);
+    }
     
     // Return accuracy as proportion of correct predictions
     return static_cast<double>(correct) / predictions.size();
@@ -517,19 +341,10 @@ double SGDClassifier::predict_proba(const std::vector<double>& x) const {
     // Calculate decision value
     double decision = 0.0;
     
-    // Calculate the dot product recursively
-    const auto calculateDecision = [this](auto& self, const auto& x, 
-                                      size_t featureIdx, double sum) -> double {
-        // Base case: all features processed
-        if (featureIdx >= weights.size() || featureIdx >= x.size()) {
-            return sum + intercept;
-        }
-        
-        // Add this feature's contribution and recurse
-        return self(self, x, featureIdx + 1, sum + weights[featureIdx] * x[featureIdx]);
-    };
-    
-    decision = calculateDecision(calculateDecision, x, 0, 0.0);
+    for (size_t i = 0; i < std::min(weights.size(), x.size()); ++i) {
+        decision += weights[i] * x[i];
+    }
+    decision += intercept;
     
     // Apply scaling
     if (std::abs(decision) > 10.0) {

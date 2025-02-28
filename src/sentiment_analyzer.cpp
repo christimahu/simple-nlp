@@ -1,3 +1,11 @@
+/**
+ * @file sentiment_analyzer.cpp
+ * @brief Implementation of the SentimentAnalyzer class
+ * 
+ * This file contains the implementation of the SentimentAnalyzer class,
+ * which orchestrates the entire sentiment analysis process.
+ */
+
 #include "sentiment_analysis.h"
 #include <fstream>
 #include <sstream>
@@ -6,27 +14,39 @@
 #include <iostream>
 #include <set>
 #include <iomanip>
+#include <functional>
+#include <numeric>
 
 namespace nlp {
 
+/**
+ * Constructor initializes the analyzer with default settings.
+ */
 SentimentAnalyzer::SentimentAnalyzer() 
-    : preprocessor(), vectorizer(nullptr), model(nullptr) {
+    : preprocessor() {
 }
 
-bool SentimentAnalyzer::loadData(const std::string& dataPath) {
+/**
+ * Loads tweet dataset from a CSV file.
+ * 
+ * @param dataPath Path to the CSV file
+ * @return Optional containing dataset (empty if loading failed)
+ */
+std::optional<SentimentDataset> SentimentAnalyzer::loadData(const std::string& dataPath) {
     std::ifstream file(dataPath);
     if (!file.is_open()) {
         std::cerr << "Error: Could not open file " << dataPath << std::endl;
-        return false;
+        return std::nullopt;
     }
     
-    data.clear();
-    std::string line;
+    SentimentDataset dataset;
     
     // Skip header if present
-    std::getline(file, line);
+    std::string headerLine;
+    std::getline(file, headerLine);
     
     // Process each line
+    std::string line;
     while (std::getline(file, line)) {
         std::stringstream ss(line);
         std::string sentimentStr, tweetText;
@@ -35,7 +55,7 @@ bool SentimentAnalyzer::loadData(const std::string& dataPath) {
         if (std::getline(ss, sentimentStr, ',') && std::getline(ss, tweetText)) {
             try {
                 int sentiment = std::stoi(sentimentStr);
-                data.push_back({sentiment, tweetText});
+                dataset.data.push_back({sentiment, tweetText});
             } catch (const std::exception& e) {
                 std::cerr << "Error parsing line: " << line << std::endl;
                 std::cerr << e.what() << std::endl;
@@ -43,46 +63,70 @@ bool SentimentAnalyzer::loadData(const std::string& dataPath) {
         }
     }
     
-    std::cout << "Loaded dataset with " << data.size() << " rows" << std::endl;
+    std::cout << "Loaded dataset with " << dataset.data.size() << " rows" << std::endl;
     
     // Show a few samples
-    if (!data.empty()) {
+    if (!dataset.data.empty()) {
         std::cout << "Sample data:" << std::endl;
-        for (size_t i = 0; i < std::min(data.size(), size_t(5)); ++i) {
-            std::cout << "Sentiment: " << data[i].first << ", Text: " << data[i].second << std::endl;
+        for (size_t i = 0; i < std::min(dataset.data.size(), size_t(5)); ++i) {
+            std::cout << "Sentiment: " << dataset.data[i].first << ", Text: " << dataset.data[i].second << std::endl;
         }
     }
     
-    return !data.empty();
+    return dataset.data.empty() ? std::nullopt : std::optional<SentimentDataset>(dataset);
 }
 
-bool SentimentAnalyzer::preprocessData(const std::vector<std::string>& steps) {
-    if (data.empty()) {
-        std::cerr << "Error: No data loaded. Call loadData() first." << std::endl;
-        return false;
+/**
+ * Preprocesses the tweets in the dataset.
+ * 
+ * @param dataset The dataset to preprocess
+ * @param steps List of preprocessing steps to apply
+ * @return Preprocessed dataset
+ */
+SentimentDataset SentimentAnalyzer::preprocessData(
+    SentimentDataset dataset, 
+    const std::vector<std::string>& steps) {
+    
+    if (dataset.data.empty()) {
+        std::cerr << "Error: No data loaded." << std::endl;
+        return dataset;
     }
     
-    cleanedTexts.clear();
-    labels.clear();
+    dataset.cleanedTexts.clear();
+    dataset.labels.clear();
     
     // Process each tweet
-    for (const auto& [sentiment, text] : data) {
+    for (const auto& [sentiment, text] : dataset.data) {
         std::string cleanText = preprocessor.preprocess(text, steps);
-        cleanedTexts.push_back(cleanText);
-        labels.push_back(sentiment);
+        dataset.cleanedTexts.push_back(cleanText);
+        dataset.labels.push_back(sentiment);
     }
     
     std::cout << "Preprocessing complete. Sample of preprocessed tweets:" << std::endl;
-    for (size_t i = 0; i < std::min(cleanedTexts.size(), size_t(5)); ++i) {
-        std::cout << "Original: " << data[i].second << std::endl;
-        std::cout << "Cleaned: " << cleanedTexts[i] << std::endl << std::endl;
+    
+    // Show sample results
+    for (size_t i = 0; i < std::min(dataset.cleanedTexts.size(), size_t(5)); ++i) {
+        std::cout << "Original: " << dataset.data[i].second << std::endl;
+        std::cout << "Cleaned: " << dataset.cleanedTexts[i] << std::endl << std::endl;
     }
     
-    return true;
+    return dataset;
 }
 
-bool SentimentAnalyzer::generateWordCloud(int sentimentValue, const std::string& outputPath) {
-    if (data.empty() || cleanedTexts.empty()) {
+/**
+ * Generates a word cloud for tweets with a specific sentiment.
+ * 
+ * @param dataset The sentiment dataset
+ * @param sentimentValue The sentiment label value (0 for negative, 4 for positive)
+ * @param outputPath Path to save the word cloud text (optional)
+ * @return True if word cloud generation was successful
+ */
+bool SentimentAnalyzer::generateWordCloud(
+    const SentimentDataset& dataset, 
+    int sentimentValue, 
+    const std::string& outputPath) {
+    
+    if (dataset.data.empty() || dataset.cleanedTexts.empty()) {
         std::cerr << "Error: No data or preprocessed data available" << std::endl;
         return false;
     }
@@ -90,9 +134,9 @@ bool SentimentAnalyzer::generateWordCloud(int sentimentValue, const std::string&
     // Collect texts with the specified sentiment
     std::vector<std::string> sentimentTexts;
     
-    for (size_t i = 0; i < data.size(); ++i) {
-        if (data[i].first == sentimentValue) {
-            sentimentTexts.push_back(cleanedTexts[i]);
+    for (size_t i = 0; i < dataset.data.size(); ++i) {
+        if (dataset.data[i].first == sentimentValue) {
+            sentimentTexts.push_back(dataset.cleanedTexts[i]);
         }
     }
     
@@ -116,6 +160,7 @@ bool SentimentAnalyzer::generateWordCloud(int sentimentValue, const std::string&
             outFile << AsciiWordCloud::generateWordCloud(sentimentTexts, 30, 100, 20, isPositive);
             outFile.close();
             std::cout << "Word cloud saved to " << outputPath << std::endl;
+            return true;
         } else {
             std::cerr << "Error: Could not open file " << outputPath << " for writing" << std::endl;
             return false;
@@ -125,32 +170,57 @@ bool SentimentAnalyzer::generateWordCloud(int sentimentValue, const std::string&
     return true;
 }
 
-bool SentimentAnalyzer::extractFeatures(double maxDf, size_t maxFeatures) {
-    if (cleanedTexts.empty()) {
+/**
+ * Extracts TF-IDF features from preprocessed tweets.
+ * 
+ * @param dataset The preprocessed dataset
+ * @param maxDf Maximum document frequency for terms
+ * @param maxFeatures Maximum number of features to extract
+ * @return Pair of (features, labels)
+ */
+std::pair<std::vector<std::vector<double>>, std::vector<int>> 
+SentimentAnalyzer::extractFeatures(
+    const SentimentDataset& dataset, 
+    double maxDf, 
+    size_t maxFeatures) {
+    
+    if (dataset.cleanedTexts.empty()) {
         std::cerr << "Error: No preprocessed data available" << std::endl;
-        return false;
+        return {{}, {}};
     }
     
-    // Create TF-IDF vectorizer
-    vectorizer = std::make_unique<TfidfVectorizer>(true, maxDf, maxFeatures);
+    // Create TF-IDF vectorizer with specified parameters
+    TfidfVectorizer vectorizer(true, maxDf, maxFeatures);
     
-    // Extract features
-    features = vectorizer->fitTransform(cleanedTexts);
+    // Extract features using the vectorizer
+    auto features = vectorizer.fitTransform(dataset.cleanedTexts);
     
     std::cout << "Extracted " << features[0].size() << " features from " 
               << features.size() << " tweets" << std::endl;
     
-    return !features.empty();
+    return {features, dataset.labels};
 }
 
-bool SentimentAnalyzer::splitData(size_t testSize, unsigned int randomState) {
-    if (features.empty() || labels.empty()) {
+/**
+ * Splits the dataset into training and testing sets.
+ * 
+ * @param dataset The dataset to split
+ * @param testSize Size of the test set
+ * @param randomState Random seed for reproducibility
+ * @return Dataset with train/test split indices
+ */
+SentimentDataset SentimentAnalyzer::splitData(
+    SentimentDataset dataset, 
+    size_t testSize, 
+    unsigned int randomState) {
+    
+    if (dataset.cleanedTexts.empty() || dataset.labels.empty()) {
         std::cerr << "Error: No features or labels available" << std::endl;
-        return false;
+        return dataset;
     }
     
     // Create indices
-    std::vector<size_t> indices(features.size());
+    std::vector<size_t> indices(dataset.cleanedTexts.size());
     std::iota(indices.begin(), indices.end(), 0);
     
     // Shuffle indices
@@ -158,105 +228,120 @@ bool SentimentAnalyzer::splitData(size_t testSize, unsigned int randomState) {
     std::shuffle(indices.begin(), indices.end(), g);
     
     // Determine test size
-    if (testSize > features.size()) {
-        testSize = features.size() / 4; // Default to 25% if too large
+    if (testSize > dataset.cleanedTexts.size()) {
+        testSize = dataset.cleanedTexts.size() / 4; // Default to 25% if too large
     }
-    size_t trainSize = features.size() - testSize;
+    size_t trainSize = dataset.cleanedTexts.size() - testSize;
     
-    // Split the data
-    xTrain.resize(trainSize);
-    yTrain.resize(trainSize);
-    xTest.resize(testSize);
-    yTest.resize(testSize);
+    // Split the indices
+    dataset.trainIndices.assign(indices.begin(), indices.begin() + trainSize);
+    dataset.testIndices.assign(indices.begin() + trainSize, indices.end());
     
-    // Count class distribution before splitting
-    std::unordered_map<int, int> class_counts;
-    for (int label : labels) {
-        class_counts[label]++;
+    // Count class distribution
+    std::unordered_map<int, int> classCounts;
+    for (int label : dataset.labels) {
+        classCounts[label]++;
     }
     
     std::cout << "Overall class distribution:" << std::endl;
-    for (const auto& [label, count] : class_counts) {
+    for (const auto& [label, count] : classCounts) {
         std::cout << "Class " << label << ": " << count << " samples (" 
-                 << (static_cast<double>(count) / labels.size() * 100.0) << "%)" << std::endl;
+                 << (static_cast<double>(count) / dataset.labels.size() * 100.0) << "%)" << std::endl;
     }
     
-    // Split the data while maintaining class distribution
-    for (size_t i = 0; i < trainSize; ++i) {
-        xTrain[i] = features[indices[i]];
-        yTrain[i] = labels[indices[i]];
-    }
-    
-    for (size_t i = 0; i < testSize; ++i) {
-        xTest[i] = features[indices[i + trainSize]];
-        yTest[i] = labels[indices[i + trainSize]];
-    }
-    
-    // Count classes in training set
-    class_counts.clear();
-    for (int label : yTrain) {
-        class_counts[label]++;
+    // Count training set distribution
+    std::unordered_map<int, int> trainCounts;
+    for (size_t idx : dataset.trainIndices) {
+        trainCounts[dataset.labels[idx]]++;
     }
     
     std::cout << "Training set class distribution:" << std::endl;
-    for (const auto& [label, count] : class_counts) {
+    for (const auto& [label, count] : trainCounts) {
         std::cout << "Class " << label << ": " << count << " samples (" 
-                 << (static_cast<double>(count) / yTrain.size() * 100.0) << "%)" << std::endl;
+                 << (static_cast<double>(count) / dataset.trainIndices.size() * 100.0) << "%)" << std::endl;
     }
     
-    // Count classes in test set
-    class_counts.clear();
-    for (int label : yTest) {
-        class_counts[label]++;
+    // Count test set distribution
+    std::unordered_map<int, int> testCounts;
+    for (size_t idx : dataset.testIndices) {
+        testCounts[dataset.labels[idx]]++;
     }
     
     std::cout << "Test set class distribution:" << std::endl;
-    for (const auto& [label, count] : class_counts) {
+    for (const auto& [label, count] : testCounts) {
         std::cout << "Class " << label << ": " << count << " samples (" 
-                 << (static_cast<double>(count) / yTest.size() * 100.0) << "%)" << std::endl;
+                 << (static_cast<double>(count) / dataset.testIndices.size() * 100.0) << "%)" << std::endl;
     }
     
-    std::cout << "Training set size: " << xTrain.size() 
-              << ", Test set size: " << xTest.size() << std::endl;
+    std::cout << "Training set size: " << dataset.trainIndices.size() 
+              << ", Test set size: " << dataset.testIndices.size() << std::endl;
     
-    return true;
+    return dataset;
 }
 
-bool SentimentAnalyzer::trainModel(double alpha, double eta0) {
-    if (xTrain.empty() || yTrain.empty()) {
+/**
+ * Trains a sentiment classifier on training data.
+ * 
+ * @param X_train Training feature matrix
+ * @param y_train Training labels
+ * @param alpha Regularization parameter
+ * @param eta0 Initial learning rate
+ * @return Unique pointer to trained classifier model
+ */
+std::unique_ptr<ClassifierModel> SentimentAnalyzer::trainModel(
+    const std::vector<std::vector<double>>& X_train,
+    const std::vector<int>& y_train,
+    double alpha, 
+    double eta0) {
+    
+    if (X_train.empty() || y_train.empty()) {
         std::cerr << "Error: No training data available" << std::endl;
-        return false;
+        return nullptr;
     }
     
     // Create and train the classifier
-    model = std::make_unique<SGDClassifier>("modified_huber", "adaptive", "elasticnet", alpha, eta0);
-    model->fit(xTrain, yTrain);
+    std::unique_ptr<ClassifierModel> model = 
+        std::make_unique<SGDClassifier>("modified_huber", "adaptive", "elasticnet", alpha, eta0);
+    
+    model->fit(X_train, y_train);
     
     std::cout << "Model training complete" << std::endl;
     
-    return true;
+    return model;
 }
 
-bool SentimentAnalyzer::evaluateModel() {
-    if (!model || xTest.empty() || yTest.empty()) {
-        std::cerr << "Error: No trained model or test data available" << std::endl;
-        return false;
+/**
+ * Evaluates the trained sentiment classifier.
+ * 
+ * @param model The trained model to evaluate
+ * @param X_test Test feature matrix
+ * @param y_test Test labels
+ * @return Map of evaluation metrics
+ */
+std::unordered_map<std::string, double> SentimentAnalyzer::evaluateModel(
+    const ClassifierModel& model,
+    const std::vector<std::vector<double>>& X_test, 
+    const std::vector<int>& y_test) {
+    
+    if (X_test.empty() || y_test.empty()) {
+        std::cerr << "Error: No test data available" << std::endl;
+        return {{"error", 1.0}};
     }
     
     // Get predictions
-    std::vector<int> yPred = model->predict(xTest);
+    std::vector<int> y_pred = model.predict(X_test);
     
     // Calculate accuracy
-    double score = model->score(xTest, yTest);
+    double score = model.score(X_test, y_test);
     std::cout << "Model Score: " << std::fixed << std::setprecision(6) << score << std::endl;
     
     // Generate confusion matrix
-    std::vector<std::vector<int>> confMatrix = ModelEvaluator::confusionMatrix(yTest, yPred);
+    std::vector<std::vector<int>> confMatrix = ModelEvaluator::confusionMatrix(y_test, y_pred);
     
     // Find unique classes in the test set and predictions
     std::set<int> classes;
-    for (int label : yTest) classes.insert(label);
-    for (int label : yPred) classes.insert(label);
+    for (int label : y_test) classes.insert(label);
+    for (int label : y_pred) classes.insert(label);
     
     // Create a mapping from class value to index
     std::unordered_map<int, size_t> classIndices;
@@ -275,9 +360,10 @@ bool SentimentAnalyzer::evaluateModel() {
     }
     std::cout << std::endl;
     
-    // Print each row with actual class label
+    // Print matrix rows
     for (int classVal : classes) {
         std::cout << std::setw(15) << classVal;
+        
         size_t rowIdx = classIndices[classVal];
         for (size_t j = 0; j < confMatrix[rowIdx].size(); ++j) {
             std::cout << std::setw(8) << confMatrix[rowIdx][j];
@@ -286,15 +372,13 @@ bool SentimentAnalyzer::evaluateModel() {
     }
     
     // Calculate per-class metrics
-    int total = 0;
     std::unordered_map<int, int> classTotals;
     std::unordered_map<int, int> correctPredictions;
     
-    for (size_t i = 0; i < yTest.size(); ++i) {
-        classTotals[yTest[i]]++;
-        total++;
-        if (yTest[i] == yPred[i]) {
-            correctPredictions[yTest[i]]++;
+    for (size_t i = 0; i < y_test.size(); ++i) {
+        classTotals[y_test[i]]++;
+        if (y_test[i] == y_pred[i]) {
+            correctPredictions[y_test[i]]++;
         }
     }
     
@@ -313,30 +397,39 @@ bool SentimentAnalyzer::evaluateModel() {
         classNames.push_back(classVal == 0 ? "Negative (0)" : "Positive (4)");
     }
     
-    std::string classReport = ModelEvaluator::classificationReport(yTest, yPred, classNames);
+    std::string classReport = ModelEvaluator::classificationReport(y_test, y_pred, classNames);
     std::cout << "\nClassification Report:" << std::endl;
     std::cout << classReport << std::endl;
     
     // Calculate prediction distribution
     std::unordered_map<int, int> predCounts;
-    for (int pred : yPred) {
+    for (int pred : y_pred) {
         predCounts[pred]++;
     }
     
     std::cout << "\nPrediction distribution:" << std::endl;
     for (const auto& [classVal, count] : predCounts) {
-        double percentage = static_cast<double>(count) / yPred.size() * 100.0;
+        double percentage = static_cast<double>(count) / y_pred.size() * 100.0;
         std::cout << "Class " << classVal << ": " << count << " predictions (" 
                  << std::fixed << std::setprecision(2) << percentage << "%)" << std::endl;
     }
     
-    return true;
+    // Calculate and return metrics
+    return ModelEvaluator::calculateMetrics(y_test, y_pred);
 }
 
-std::map<std::string, std::string> SentimentAnalyzer::predictSentiment(const std::string& text) {
-    if (!model || !vectorizer) {
-        throw std::runtime_error("Model and vectorizer must be trained first");
-    }
+/**
+ * Predicts the sentiment of new text.
+ * 
+ * @param text The text to analyze
+ * @param model The trained model
+ * @param vectorizer The trained vectorizer
+ * @return Sentiment prediction result
+ */
+SentimentResult SentimentAnalyzer::predictSentiment(
+    const std::string& text,
+    const ClassifierModel& model,
+    const TfidfVectorizer& vectorizer) {
     
     // Preprocess the text
     std::string cleanText = preprocessor.preprocess(text);
@@ -348,14 +441,15 @@ std::map<std::string, std::string> SentimentAnalyzer::predictSentiment(const std
         cleanText = text;
     }
     
-    // Extract features
-    std::vector<std::vector<double>> features = vectorizer->transform({cleanText});
+    // Extract features (need to use a vector to match the interface)
+    std::vector<std::string> textVec = {cleanText};
+    std::vector<std::vector<double>> features = vectorizer.transform(textVec);
     
     // Make prediction
-    int sentiment = model->predict(features)[0];
+    int sentiment = model.predict(features)[0];
     
     // Get confidence scores
-    std::vector<double> decisionValues = model->decisionFunction(features);
+    std::vector<double> decisionValues = model.decisionFunction(features);
     double rawScore = decisionValues[0];
     
     // Scale very large scores for better interpretation
@@ -372,34 +466,104 @@ std::map<std::string, std::string> SentimentAnalyzer::predictSentiment(const std
     // Interpret the prediction
     std::string sentimentLabel = (sentiment == 4) ? "Positive" : "Negative";
     
-    // Return the result as a map
-    std::map<std::string, std::string> result;
-    result["text"] = text;
-    result["clean_text"] = cleanText;
-    result["sentiment"] = sentimentLabel;
-    result["raw_score"] = std::to_string(rawScore);
-    result["scaled_score"] = std::to_string(scaledScore);
-    result["confidence"] = std::to_string(confidence);
-    result["probability"] = std::to_string(probability);
+    // Generate explanation
+    std::string explanation = generateExplanation(rawScore, confidence);
     
-    // Add some context about the prediction
+    // Create and return sentiment result
+    SentimentResult result;
+    result.text = text;
+    result.cleanText = cleanText;
+    result.sentiment = sentimentLabel;
+    result.rawScore = rawScore;
+    result.scaledScore = scaledScore;
+    result.confidence = confidence;
+    result.probability = probability;
+    result.explanation = explanation;
+    
+    return result;
+}
+
+/**
+ * Generates a human-readable explanation of the sentiment prediction.
+ * 
+ * @param score Decision function score
+ * @param confidence Confidence value
+ * @return Explanation text
+ */
+std::string SentimentAnalyzer::generateExplanation(double score, double confidence) const {
     std::stringstream explanation;
     
-    if (confidence > 8.0) {
-        explanation << "The model is very confident ";
-    } else if (confidence > 5.0) {
-        explanation << "The model is confident ";
-    } else if (confidence > 2.0) {
-        explanation << "The model suggests ";
-    } else {
+    // Generate explanation based on confidence level
+    if (confidence <= 2.0) {
         explanation << "The model slightly leans toward ";
+    } else if (confidence <= 5.0) {
+        explanation << "The model suggests that this text is ";
+    } else if (confidence <= 8.0) {
+        explanation << "The model is confident that this text is ";
+    } else {
+        explanation << "The model is very confident that this text is ";
     }
     
-    explanation << "that this text is " 
-               << ((rawScore > 0) ? "positive" : "negative") 
-               << " (score: " << std::fixed << std::setprecision(2) << scaledScore << ").";
+    explanation << ((score > 0) ? "positive" : "negative");
+    explanation << " (score: " << std::fixed << std::setprecision(2) << score << ").";
     
-    result["explanation"] = explanation.str();
+    return explanation.str();
+}
+
+/**
+ * Convert SentimentResult to a string map for serialization.
+ * 
+ * @return Map representation of the result
+ */
+std::map<std::string, std::string> SentimentResult::toMap() const {
+    return {
+        {"text", text},
+        {"clean_text", cleanText},
+        {"sentiment", sentiment},
+        {"raw_score", std::to_string(rawScore)},
+        {"scaled_score", std::to_string(scaledScore)},
+        {"confidence", std::to_string(confidence)},
+        {"probability", std::to_string(probability)},
+        {"explanation", explanation}
+    };
+}
+
+/**
+ * Create a SentimentResult from a string map.
+ * 
+ * @param map Map representation of a result
+ * @return Reconstructed SentimentResult
+ */
+SentimentResult SentimentResult::fromMap(const std::map<std::string, std::string>& map) {
+    SentimentResult result;
+    
+    // Extract values with safety checks
+    auto extractString = [&map](const std::string& key) -> std::string {
+        auto it = map.find(key);
+        return (it != map.end()) ? it->second : "";
+    };
+    
+    auto extractDouble = [&map](const std::string& key) -> double {
+        auto it = map.find(key);
+        if (it != map.end()) {
+            try {
+                return std::stod(it->second);
+            } catch (...) {
+                return 0.0;
+            }
+        }
+        return 0.0;
+    };
+    
+    // Set fields from map
+    result.text = extractString("text");
+    result.cleanText = extractString("clean_text");
+    result.sentiment = extractString("sentiment");
+    result.rawScore = extractDouble("raw_score");
+    result.scaledScore = extractDouble("scaled_score");
+    result.confidence = extractDouble("confidence");
+    result.probability = extractDouble("probability");
+    result.explanation = extractString("explanation");
     
     return result;
 }

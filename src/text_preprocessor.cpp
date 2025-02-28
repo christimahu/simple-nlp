@@ -227,27 +227,24 @@ std::string TextPreprocessor::stripWhitespace(std::string_view text) const {
     auto end = str.find_last_not_of(" \t\n\r\f\v");
     str = str.substr(start, end - start + 1);
     
-    // Replace multiple whitespace with a single space using a recursive approach
-    const auto stripExtraWhitespace = [](const std::string& s, std::string result = "", bool prevWasSpace = false) -> std::string {
-        // Base case: end of string
-        if (s.empty()) {
-            return result;
-        }
-        
-        // Process first character and recursively process the rest
-        char c = s[0];
+    // Replace multiple whitespace with a single space
+    std::string result;
+    result.reserve(str.size());
+    
+    bool prevWasSpace = false;
+    for (char c : str) {
         if (std::isspace(static_cast<unsigned char>(c))) {
             if (!prevWasSpace) {
-                return stripExtraWhitespace(s.substr(1), result + ' ', true);
-            } else {
-                return stripExtraWhitespace(s.substr(1), result, true);
+                result += ' ';
+                prevWasSpace = true;
             }
         } else {
-            return stripExtraWhitespace(s.substr(1), result + c, false);
+            result += c;
+            prevWasSpace = false;
         }
-    };
+    }
     
-    return stripExtraWhitespace(str);
+    return result;
 }
 
 /**
@@ -273,27 +270,21 @@ std::string TextPreprocessor::removeStopwords(std::string_view text) const {
         return stops.find(w) == stops.end();
     });
     
-    // Use a recursive approach to join the filtered words
-    const auto joinWords = [](auto begin, auto end, std::string result = "") -> std::string {
-        // Base case: no more words
-        if (begin == end) {
-            return result;
-        }
-        
-        // Add a space if this isn't the first word
-        if (!result.empty()) {
-            result += " ";
-        }
-        
-        // Add this word and recursively process the rest
-        return joinWords(std::next(begin), end, result + *begin);
-    };
-    
     // Create a vector from the filtered view for easier manipulation
     std::vector<std::string> filteredWords;
     std::ranges::copy(nonStopwords, std::back_inserter(filteredWords));
     
-    return joinWords(filteredWords.begin(), filteredWords.end());
+    // Join the words with spaces
+    std::string result;
+    
+    for (size_t i = 0; i < filteredWords.size(); ++i) {
+        if (i > 0) {
+            result += " ";
+        }
+        result += filteredWords[i];
+    }
+    
+    return result;
 }
 
 /**
