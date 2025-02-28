@@ -14,6 +14,7 @@
 #include <vector>
 #include <filesystem>
 #include <chrono>
+#include <iomanip>
 
 /**
  * Process a single file and analyze its sentiment.
@@ -28,7 +29,7 @@
  * @return True if analysis was successful
  */
 bool analyzeSingleFile(
-    const nlp::SentimentAnalyzer& analyzer,
+    nlp::SentimentAnalyzer& analyzer, // Changed from const to non-const
     const nlp::ClassifierModel& model,
     const nlp::TfidfVectorizer& vectorizer,
     const std::string& filePath) {
@@ -309,8 +310,8 @@ int main(int argc, char* argv[]) {
         nlp::SentimentDataset dataset;
         dataset.data = sampleData;
         
-        // Preprocess data
-        dataset = analyzer.preprocessData(dataset);
+        // Preprocess data - Using std::move to avoid copying the dataset
+        dataset = analyzer.preprocessData(std::move(dataset));
         
         // Extract features
         auto [features, labels] = analyzer.extractFeatures(dataset);
@@ -346,7 +347,7 @@ int main(int argc, char* argv[]) {
             }
             
             // Recursively process next file
-            return self(self, index + 1, argc, argv[]);
+            return self(self, index + 1, argc, argv);
         };
         
         processFiles(processFiles, 1, argc, argv);

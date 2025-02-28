@@ -531,6 +531,8 @@ struct SentimentDataset {
     std::vector<std::pair<int, std::string>> data;     // (label, text) pairs
     std::vector<std::string> cleanedTexts;             // Preprocessed texts
     std::vector<int> labels;                           // Labels (0=negative, 4=positive)
+    std::vector<std::vector<double>> features;         // Feature vectors for texts
+    std::unique_ptr<ClassifierModel> model;            // Trained classifier model
     
     // Split indices
     std::vector<size_t> trainIndices;
@@ -571,6 +573,20 @@ struct SentimentDataset {
      * @return Vector of texts with the specified sentiment
      */
     std::vector<std::string> getTextsWithSentiment(int sentiment) const;
+    
+    /**
+     * @brief Get feature vectors for training data
+     * 
+     * @return Matrix of training feature vectors
+     */
+    std::vector<std::vector<double>> getTrainFeatures() const;
+    
+    /**
+     * @brief Get feature vectors for test data
+     * 
+     * @return Matrix of test feature vectors
+     */
+    std::vector<std::vector<double>> getTestFeatures() const;
 };
 
 /**
@@ -601,7 +617,7 @@ public:
      * @param steps List of preprocessing steps to apply
      * @return Preprocessed dataset
      */
-    SentimentDataset preprocessData(SentimentDataset dataset, 
+    SentimentDataset preprocessData(SentimentDataset&& dataset, 
                                   const std::vector<std::string>& steps = {});
     
     /**
@@ -637,7 +653,7 @@ public:
      * @param randomState Random seed for reproducibility
      * @return Dataset with train/test split indices
      */
-    SentimentDataset splitData(SentimentDataset dataset, 
+    SentimentDataset splitData(SentimentDataset&& dataset, 
                              size_t testSize = 40000, 
                              unsigned int randomState = 42);
     

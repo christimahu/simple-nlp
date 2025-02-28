@@ -47,7 +47,8 @@ void runSentimentDemo() {
     
     // Preprocess data
     std::cout << "\nPreprocessing text data..." << std::endl;
-    dataset = analyzer.preprocessData(dataset);
+    // Use std::move to avoid copying the dataset with unique_ptr
+    dataset = analyzer.preprocessData(std::move(dataset));
     
     // Show sample of preprocessed data using recursion
     const auto showSamples = [&](auto& self, size_t index, size_t maxSamples) -> void {
@@ -76,7 +77,8 @@ void runSentimentDemo() {
     std::cout << "Splitting data into train/test sets..." << std::endl;
     dataset.features = features;
     dataset.labels = labels;
-    dataset = analyzer.splitData(dataset, 3); // 3 test samples
+    // Use std::move to avoid copying the dataset with unique_ptr
+    dataset = analyzer.splitData(std::move(dataset), 3); // 3 test samples
     
     // Train model
     std::cout << "Training sentiment classifier..." << std::endl;

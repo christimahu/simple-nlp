@@ -14,6 +14,7 @@
 #include <chrono>
 #include <memory>
 #include <functional>
+#include <iomanip>
 
 /**
  * Run basic tests to verify component functionality.
@@ -170,14 +171,16 @@ void runFullAnalysis(const std::string& dataPath) {
         return;
     }
     
-    auto dataset = datasetOpt.value();
+    // Use std::move to avoid copying the dataset with unique_ptr
+    auto dataset = std::move(datasetOpt).value();
     
     // Define the analysis pipeline using a recursive approach
     const auto runPipeline = [&](auto& self, size_t step) -> void {
         // Step 1: Preprocess the data
         if (step == 1) {
             std::cout << "\n====== Preprocessing Data ======" << std::endl;
-            dataset = analyzer.preprocessData(dataset);
+            // Use std::move to transfer ownership instead of copying
+            dataset = analyzer.preprocessData(std::move(dataset));
             self(self, step + 1);
         }
         // Step 2: Generate word clouds
@@ -200,7 +203,8 @@ void runFullAnalysis(const std::string& dataPath) {
         // Step 4: Split the data
         else if (step == 4) {
             std::cout << "\n====== Splitting Data ======" << std::endl;
-            dataset = analyzer.splitData(dataset);
+            // Use std::move to transfer ownership instead of copying
+            dataset = analyzer.splitData(std::move(dataset));
             self(self, step + 1);
         }
         // Step 5: Train the model
@@ -220,7 +224,7 @@ void runFullAnalysis(const std::string& dataPath) {
             
             // Store model and continue pipeline
             dataset.model = std::move(model);
-            self(self, step + 6);
+            self(self, step + 1);
         }
         // Step 6: Evaluate the model
         else if (step == 6) {
@@ -366,7 +370,10 @@ std::vector<std::vector<double>> SentimentDataset::getTrainFeatures() const {
         }
         
         // Add this feature vector
-        trainFeatures.push_back(features[trainIndices[index]]);
+        size_t dataIndex = trainIndices[index];
+        if (dataIndex < features.size()) {
+            trainFeatures.push_back(features[dataIndex]);
+        }
         
         // Recursively process next index
         self(self, index + 1);
@@ -393,7 +400,10 @@ std::vector<std::vector<double>> SentimentDataset::getTestFeatures() const {
         }
         
         // Add this feature vector
-        testFeatures.push_back(features[testIndices[index]]);
+        size_t dataIndex = testIndices[index];
+        if (dataIndex < features.size()) {
+            testFeatures.push_back(features[dataIndex]);
+        }
         
         // Recursively process next index
         self(self, index + 1);

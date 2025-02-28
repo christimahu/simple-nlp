@@ -10,6 +10,7 @@
 #include "sentiment_analysis.h"
 #include <algorithm>
 #include <functional>
+#include <sstream>
 
 namespace nlp {
 
@@ -248,123 +249,6 @@ std::vector<std::vector<double>> SentimentDataset::getTestFeatures() const {
     extractFeatures(extractFeatures, 0);
     
     return testFeatures;
-}
-
-/**
- * Calculate class distribution in the dataset.
- * 
- * This method counts the occurrences of each sentiment class
- * in the dataset, providing insights into data balance.
- * 
- * @return Map of sentiment values to their frequencies
- */
-std::unordered_map<int, size_t> SentimentDataset::getClassDistribution() const {
-    std::unordered_map<int, size_t> distribution;
-    
-    // Count classes recursively
-    const auto countClasses = [this, &distribution](auto& self, size_t index) -> void {
-        // Base case: all labels counted
-        if (index >= labels.size()) {
-            return;
-        }
-        
-        // Count this label
-        distribution[labels[index]]++;
-        
-        // Recursively count next label
-        self(self, index + 1);
-    };
-    
-    countClasses(countClasses, 0);
-    
-    return distribution;
-}
-
-/**
- * Get statistics about the dataset.
- * 
- * This method provides basic statistics about the dataset,
- * such as its size, class distribution, and unique words.
- * 
- * @return Map of statistic names to their values
- */
-std::map<std::string, std::string> SentimentDataset::getStatistics() const {
-    std::map<std::string, std::string> stats;
-    
-    // Basic size information
-    stats["total_samples"] = std::to_string(data.size());
-    stats["cleaned_samples"] = std::to_string(cleanedTexts.size());
-    stats["train_samples"] = std::to_string(trainIndices.size());
-    stats["test_samples"] = std::to_string(testIndices.size());
-    
-    // Get class distribution
-    auto distribution = getClassDistribution();
-    
-    // Format class distribution as a string
-    std::stringstream distStream;
-    
-    // Add distribution entries recursively
-    const auto addDistribution = [&distStream](auto& self, auto it, auto end, bool isFirst) -> void {
-        // Base case: all entries added
-        if (it == end) {
-            return;
-        }
-        
-        // Add separator if needed
-        if (!isFirst) {
-            distStream << ", ";
-        }
-        
-        // Add this entry
-        distStream << "Class " << it->first << ": " << it->second;
-        
-        // Recursively add next entry
-        self(self, std::next(it), end, false);
-    };
-    
-    addDistribution(addDistribution, distribution.begin(), distribution.end(), true);
-    stats["class_distribution"] = distStream.str();
-    
-    // Count unique words in the dataset
-    std::set<std::string> uniqueWords;
-    
-    // Process each text recursively
-    const auto processTexts = [this, &uniqueWords](auto& self, size_t textIndex) -> void {
-        // Base case: all texts processed
-        if (textIndex >= cleanedTexts.size()) {
-            return;
-        }
-        
-        // Get words from this text
-        std::istringstream iss(cleanedTexts[textIndex]);
-        
-        // Process each word recursively
-        const auto processWords = [&uniqueWords](auto& self, std::istringstream& iss) -> void {
-            std::string word;
-            
-            // Base case: no more words to extract
-            if (!(iss >> word)) {
-                return;
-            }
-            
-            // Add this word to the set
-            uniqueWords.insert(word);
-            
-            // Recursively process next word
-            self(self, iss);
-        };
-        
-        processWords(processWords, iss);
-        
-        // Recursively process next text
-        self(self, textIndex + 1);
-    };
-    
-    processTexts(processTexts, 0);
-    
-    stats["unique_words"] = std::to_string(uniqueWords.size());
-    
-    return stats;
 }
 
 } // namespace nlp

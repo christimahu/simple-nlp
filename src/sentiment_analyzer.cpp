@@ -73,23 +73,26 @@ std::optional<SentimentDataset> SentimentAnalyzer::loadData(const std::string& d
         }
     }
     
-    return dataset.data.empty() ? std::nullopt : std::optional<SentimentDataset>(dataset);
+    if (dataset.data.empty()) {
+        return std::nullopt;
+    }
+    return dataset;
 }
 
 /**
  * Preprocesses the tweets in the dataset.
  * 
- * @param dataset The dataset to preprocess
+ * @param dataset The dataset to preprocess (moved)
  * @param steps List of preprocessing steps to apply
  * @return Preprocessed dataset
  */
 SentimentDataset SentimentAnalyzer::preprocessData(
-    SentimentDataset dataset, 
+    SentimentDataset&& dataset, 
     const std::vector<std::string>& steps) {
     
     if (dataset.data.empty()) {
         std::cerr << "Error: No data loaded." << std::endl;
-        return dataset;
+        return std::move(dataset);
     }
     
     dataset.cleanedTexts.clear();
@@ -110,7 +113,7 @@ SentimentDataset SentimentAnalyzer::preprocessData(
         std::cout << "Cleaned: " << dataset.cleanedTexts[i] << std::endl << std::endl;
     }
     
-    return dataset;
+    return std::move(dataset);
 }
 
 /**
@@ -204,19 +207,19 @@ SentimentAnalyzer::extractFeatures(
 /**
  * Splits the dataset into training and testing sets.
  * 
- * @param dataset The dataset to split
+ * @param dataset The dataset to split (moved)
  * @param testSize Size of the test set
  * @param randomState Random seed for reproducibility
  * @return Dataset with train/test split indices
  */
 SentimentDataset SentimentAnalyzer::splitData(
-    SentimentDataset dataset, 
+    SentimentDataset&& dataset, 
     size_t testSize, 
     unsigned int randomState) {
     
     if (dataset.cleanedTexts.empty() || dataset.labels.empty()) {
         std::cerr << "Error: No features or labels available" << std::endl;
-        return dataset;
+        return std::move(dataset);
     }
     
     // Create indices
@@ -276,7 +279,7 @@ SentimentDataset SentimentAnalyzer::splitData(
     std::cout << "Training set size: " << dataset.trainIndices.size() 
               << ", Test set size: " << dataset.testIndices.size() << std::endl;
     
-    return dataset;
+    return std::move(dataset);
 }
 
 /**
