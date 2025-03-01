@@ -1,72 +1,64 @@
 /**
  * @file text_preprocessor.cpp
- * @brief Implementation of the TextPreprocessor class
- * 
- * This file contains the implementation of text preprocessing methods,
- * which clean and normalize text for sentiment analysis.
+ * @brief Implements text preprocessing functions for sentiment analysis.
+ *
+ * This file provides the implementation of text preprocessing utilities
+ * that clean and normalize raw text data before feature extraction.
+ * It applies transformations like lowercasing, removing punctuation,
+ * and removing stopwords to standardize text for machine learning.
  */
 
-#include "sentiment_analysis.h"
+#include "text_preprocessor.h"
 #include <algorithm>
 #include <cctype>
 #include <sstream>
-#include <locale>
-#include <functional>
+#include <string>
+#include <unordered_set>
 
 namespace nlp {
 
 /**
- * Constructor initializes the set of stopwords.
- * 
- * Stopwords are common words (like "the", "a", "is") that are often
- * removed from text during preprocessing as they carry little semantic meaning.
+ * @brief Constructs a new TextPreprocessor instance with default stopwords.
  */
 TextPreprocessor::TextPreprocessor() {
-    // Initialize a comprehensive list of English stopwords
-    stops = {
-        "i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", 
-        "you're", "you've", "you'll", "you'd", "your", "yours", "yourself", 
-        "yourselves", "he", "him", "his", "himself", "she", "she's", "her", 
-        "hers", "herself", "it", "it's", "its", "itself", "they", "them", "their", 
-        "theirs", "themselves", "what", "which", "who", "whom", "this", "that", 
-        "that'll", "these", "those", "am", "is", "are", "was", "were", "be", 
-        "been", "being", "have", "has", "had", "having", "do", "does", "did", 
-        "doing", "a", "an", "the", "and", "but", "if", "or", "because", "as", 
-        "until", "while", "of", "at", "by", "for", "with", "about", "against", 
-        "between", "into", "through", "during", "before", "after", "above", 
-        "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", 
-        "under", "again", "further", "then", "once", "here", "there", "when", 
-        "where", "why", "how", "all", "any", "both", "each", "few", "more", 
-        "most", "other", "some", "such", "no", "nor", "not", "only", "own", 
-        "same", "so", "than", "too", "very", "s", "t", "can", "will", "just", 
-        "don", "don't", "should", "should've", "now", "d", "ll", "m", "o", 
-        "re", "ve", "y"
+    // Initialize common English stopwords
+    stopwords = {
+        "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
+        "has", "he", "in", "is", "it", "its", "of", "on", "that", "the",
+        "to", "was", "were", "will", "with", "i", "me", "my", "myself",
+        "we", "our", "ours", "ourselves", "you", "your", "yours",
+        "yourself", "yourselves", "he", "him", "his", "himself", "she",
+        "her", "hers", "herself", "it", "its", "itself", "they", "them",
+        "their", "theirs", "themselves", "what", "which", "who", "whom",
+        "this", "that", "these", "those", "am", "is", "are", "was", "were",
+        "be", "been", "being", "have", "has", "had", "having", "do", "does",
+        "did", "doing", "would", "should", "could", "ought", "i'm", "you're",
+        "he's", "she's", "it's", "we're", "they're", "i've", "you've",
+        "we've", "they've", "i'd", "you'd", "he'd", "she'd", "we'd",
+        "they'd", "i'll", "you'll", "he'll", "she'll", "we'll", "they'll",
+        "isn't", "aren't", "wasn't", "weren't", "hasn't", "haven't", "hadn't",
+        "doesn't", "don't", "didn't", "won't", "wouldn't", "shan't", "shouldn't",
+        "can't", "cannot", "couldn't", "mustn't", "let's", "that's", "who's",
+        "what's", "here's", "there's", "when's", "where's", "why's", "how's",
+        "so", "than", "too", "very", "just", "but", "however", "still"
     };
 }
 
 /**
- * Main preprocessing function that applies a series of text transformations.
+ * @brief Applies a sequence of preprocessing steps to clean and normalize text.
  * 
- * This function uses a functional approach to apply a sequence of transformations
- * to the input text. If specific steps are provided, only those are applied;
- * otherwise, a default sequence is used.
+ * This method applies text transformations to prepare the input for machine learning.
+ * If no specific steps are provided, it applies a default sequence of transformations.
  * 
- * @param text The input text to preprocess
- * @param steps List of preprocessing steps to apply (empty means use defaults)
- * @return The preprocessed text
+ * @param text The input text to process.
+ * @param steps The set of transformations to apply.
+ * @return The preprocessed text.
  */
-std::string TextPreprocessor::preprocess(std::string_view text, 
-                                        const std::vector<std::string>& steps) const {
-    // Get all available preprocessing functions
-    auto preprocessingFuncs = getPreprocessingFunctions();
-    
-    // Start with a copy of the text as string
-    std::string result{text};
-    
-    // If no steps provided, apply default steps in a sensible order
-    if (steps.empty()) {
-        // Define sensible default order for preprocessing
-        static const std::vector<std::string> defaultSteps = {
+std::string TextPreprocessor::preprocess(std::string_view text, const std::vector<std::string>& steps) const {
+    // If no steps provided, use default preprocessing pipeline
+    std::vector<std::string> preprocessingSteps = steps;
+    if (preprocessingSteps.empty()) {
+        preprocessingSteps = {
             "remove_non_ascii", 
             "lowercase", 
             "remove_punctuation", 
@@ -74,231 +66,235 @@ std::string TextPreprocessor::preprocess(std::string_view text,
             "strip_whitespace", 
             "remove_stopwords"
         };
-        
-        // Apply each step functionally, piping the output of one to the input of the next
-        for (const auto& step : defaultSteps) {
-            if (preprocessingFuncs.contains(step)) {
-                result = preprocessingFuncs.at(step)(result);
-            }
-        }
-    } else {
-        // Apply only the specified steps in the given order
-        for (const auto& step : steps) {
-            if (preprocessingFuncs.contains(step)) {
-                result = preprocessingFuncs.at(step)(result);
-            }
+    }
+    
+    std::string processedText(text);
+    auto functions = getPreprocessingFunctions();
+    
+    // Apply each preprocessing step in sequence
+    for (const auto& step : preprocessingSteps) {
+        auto it = functions.find(step);
+        if (it != functions.end()) {
+            processedText = it->second(processedText);
         }
     }
     
-    return result;
+    return processedText;
 }
 
 /**
- * Returns a map of preprocessing function names to function objects.
+ * @brief Creates a map of preprocessing function names to their implementations.
  * 
- * This function demonstrates function composition and the use of lambda functions
- * to create a mapping of named preprocessing steps that can be dynamically selected.
+ * This method returns all available preprocessing functions, allowing
+ * for dynamic construction of preprocessing pipelines and easy testing.
  * 
- * @return Map of preprocessing function names to function objects
+ * @return Map of function names to function implementations.
  */
 std::unordered_map<std::string, TextPreprocessor::PreprocessingFunc> 
 TextPreprocessor::getPreprocessingFunctions() const {
-    // Create and return a map linking step names to their implementations
     return {
-        {"remove_non_ascii", [this](std::string_view text) { return removeNonAscii(text); }},
-        {"lowercase", [this](std::string_view text) { return lowercase(text); }},
-        {"remove_punctuation", [this](std::string_view text) { return removePunctuation(text); }},
-        {"remove_numbers", [this](std::string_view text) { return removeNumbers(text); }},
-        {"strip_whitespace", [this](std::string_view text) { return stripWhitespace(text); }},
-        {"remove_stopwords", [this](std::string_view text) { return removeStopwords(text); }},
-        {"stem_words", [this](std::string_view text) { return stemWords(text); }}
+        {"lowercase", [this](std::string_view t) { return this->lowercase(t); }},
+        {"remove_punctuation", [this](std::string_view t) { return this->removePunctuation(t); }},
+        {"remove_numbers", [this](std::string_view t) { return this->removeNumbers(t); }},
+        {"remove_non_ascii", [this](std::string_view t) { return this->removeNonAscii(t); }},
+        {"strip_whitespace", [this](std::string_view t) { return this->stripWhitespace(t); }},
+        {"remove_stopwords", [this](std::string_view t) { return this->removeStopwords(t); }},
+        {"stem_words", [this](std::string_view t) { return this->stemWords(t); }}
     };
 }
 
 /**
- * Removes non-ASCII characters from text.
+ * @brief Converts text to lowercase.
  * 
- * Uses a functional approach with ranges to filter characters.
+ * This transformation ensures all characters are lowercase,
+ * which helps with standardization and reduces feature dimensionality.
  * 
- * @param text Input text
- * @return Text with only ASCII characters
- */
-std::string TextPreprocessor::removeNonAscii(std::string_view text) const {
-    std::string result;
-    result.reserve(text.size());
-    
-    // Use ranges to filter ASCII characters (functional approach)
-    auto asciiOnly = text | std::views::filter([](char c) { 
-        return static_cast<unsigned char>(c) < 128; 
-    });
-    
-    // Copy filtered characters to result
-    std::ranges::copy(asciiOnly, std::back_inserter(result));
-    
-    return result;
-}
-
-/**
- * Converts text to lowercase.
- * 
- * Uses a functional approach with ranges to transform characters.
- * 
- * @param text Input text
- * @return Lowercase text
+ * @param text The input text.
+ * @return The lowercase version of the text.
  */
 std::string TextPreprocessor::lowercase(std::string_view text) const {
-    std::string result{text};
-    
-    // Use ranges to transform all characters to lowercase (functional approach)
-    std::ranges::transform(result, result.begin(), 
-                         [](unsigned char c) { return std::tolower(c); });
-    
+    std::string result(text);
+    std::transform(result.begin(), result.end(), result.begin(), 
+                   [](unsigned char c) { return std::tolower(c); });
     return result;
 }
 
 /**
- * Removes punctuation characters from text.
+ * @brief Removes punctuation from text.
  * 
- * Uses a functional approach with ranges to filter characters.
+ * This transformation strips all punctuation marks from the text,
+ * which helps with tokenization and reduces noise in the feature set.
  * 
- * @param text Input text
- * @return Text without punctuation
+ * @param text The input text.
+ * @return Text without punctuation.
  */
 std::string TextPreprocessor::removePunctuation(std::string_view text) const {
     std::string result;
     result.reserve(text.size());
     
-    // Use ranges to filter non-punctuation characters (functional approach)
-    auto noPunct = text | std::views::filter([](char c) { 
-        return !std::ispunct(static_cast<unsigned char>(c)); 
-    });
-    
-    // Copy filtered characters to result
-    std::ranges::copy(noPunct, std::back_inserter(result));
-    
+    for (char c : text) {
+        if (!std::ispunct(static_cast<unsigned char>(c))) {
+            result += c;
+        }
+    }
     return result;
 }
 
 /**
- * Removes numeric digits from text.
+ * @brief Removes numerical digits from text.
  * 
- * Uses a functional approach with ranges to filter characters.
+ * This transformation removes all numeric characters (0-9) from the input,
+ * as numbers typically don't contribute to sentiment analysis.
  * 
- * @param text Input text
- * @return Text without digits
+ * @param text The input text.
+ * @return Text without numbers.
  */
 std::string TextPreprocessor::removeNumbers(std::string_view text) const {
     std::string result;
     result.reserve(text.size());
     
-    // Use ranges to filter non-digit characters (functional approach)
-    auto noDigits = text | std::views::filter([](char c) { 
-        return !std::isdigit(static_cast<unsigned char>(c)); 
-    });
-    
-    // Copy filtered characters to result
-    std::ranges::copy(noDigits, std::back_inserter(result));
-    
+    for (char c : text) {
+        if (!std::isdigit(static_cast<unsigned char>(c))) {
+            result += c;
+        }
+    }
     return result;
 }
 
 /**
- * Normalizes whitespace in text, removing leading/trailing and duplicate spaces.
+ * @brief Removes non-ASCII characters from text.
  * 
- * @param text Input text
- * @return Text with normalized whitespace
+ * This transformation ensures that only standard ASCII characters are retained,
+ * which can help with compatibility and reduce noise from special characters.
+ * 
+ * @param text The input text.
+ * @return Cleaned text with only ASCII characters.
+ */
+std::string TextPreprocessor::removeNonAscii(std::string_view text) const {
+    std::string result;
+    result.reserve(text.size());
+    
+    for (char c : text) {
+        if (static_cast<unsigned char>(c) < 128) {
+            result += c;
+        }
+    }
+    return result;
+}
+
+/**
+ * @brief Normalizes whitespace in text.
+ * 
+ * This transformation collapses multiple consecutive whitespace characters
+ * into a single space and trims leading/trailing whitespace.
+ * 
+ * @param text The input text.
+ * @return Trimmed text with normalized whitespace.
  */
 std::string TextPreprocessor::stripWhitespace(std::string_view text) const {
-    // Convert to string for manipulation
-    std::string str{text};
-    
-    // Skip if empty
-    if (str.empty()) {
-        return str;
-    }
-    
-    // Remove leading whitespace
-    auto start = str.find_first_not_of(" \t\n\r\f\v");
-    if (start == std::string::npos) {
-        return "";
-    }
-    
-    // Remove trailing whitespace
-    auto end = str.find_last_not_of(" \t\n\r\f\v");
-    str = str.substr(start, end - start + 1);
-    
-    // Replace multiple whitespace with a single space
     std::string result;
-    result.reserve(str.size());
+    result.reserve(text.size());
     
-    bool prevWasSpace = false;
-    for (char c : str) {
+    bool lastWasSpace = true;  // Start with true to trim leading spaces
+    
+    for (char c : text) {
         if (std::isspace(static_cast<unsigned char>(c))) {
-            if (!prevWasSpace) {
+            if (!lastWasSpace) {
                 result += ' ';
-                prevWasSpace = true;
             }
+            lastWasSpace = true;
         } else {
             result += c;
-            prevWasSpace = false;
+            lastWasSpace = false;
         }
+    }
+    
+    // Trim trailing space if present
+    if (!result.empty() && result.back() == ' ') {
+        result.pop_back();
     }
     
     return result;
 }
 
 /**
- * Removes common stopwords from text.
+ * @brief Removes common stopwords from text.
  * 
- * Uses a functional approach with tokenization and filtering.
+ * This transformation removes common words (like "the", "is", "and")
+ * that typically don't contribute meaningful sentiment information.
  * 
- * @param text Input text
- * @return Text without stopwords
+ * @param text The input text.
+ * @return The text with stopwords removed.
  */
 std::string TextPreprocessor::removeStopwords(std::string_view text) const {
-    std::stringstream ss{std::string{text}};
-    std::vector<std::string> words;
+    std::istringstream iss{std::string(text)};
+    std::ostringstream oss;
     std::string word;
+    bool firstWord = true;
     
-    // Tokenize the text into words
-    while (ss >> word) {
-        words.push_back(word);
-    }
-    
-    // Filter out stopwords using a functional approach
-    auto nonStopwords = words | std::views::filter([this](const std::string& w) {
-        return stops.find(w) == stops.end();
-    });
-    
-    // Create a vector from the filtered view for easier manipulation
-    std::vector<std::string> filteredWords;
-    std::ranges::copy(nonStopwords, std::back_inserter(filteredWords));
-    
-    // Join the words with spaces
-    std::string result;
-    
-    for (size_t i = 0; i < filteredWords.size(); ++i) {
-        if (i > 0) {
-            result += " ";
+    while (iss >> word) {
+        if (stopwords.find(word) == stopwords.end()) {
+            if (!firstWord) {
+                oss << ' ';
+            }
+            oss << word;
+            firstWord = false;
         }
-        result += filteredWords[i];
     }
     
-    return result;
+    return oss.str();
 }
 
 /**
- * Simple stemming function (placeholder for a more sophisticated implementation).
+ * @brief Applies basic stemming to reduce words to their root form.
  * 
- * Note: A real implementation would typically use a Porter stemmer or similar.
+ * This is a simple stemming implementation that handles common English
+ * suffixes. For production use, consider a more sophisticated stemming
+ * algorithm like Porter or Snowball.
  * 
- * @param text Input text
- * @return Stemmed text
+ * @param text The input text.
+ * @return The stemmed version of the text.
  */
 std::string TextPreprocessor::stemWords(std::string_view text) const {
-    // This would require a Porter stemmer or similar library
-    // For now, just return the original text
-    return std::string{text};
+    // This is a placeholder for a more sophisticated stemming algorithm
+    // A simple implementation might handle common suffixes
+    
+    std::istringstream iss{std::string(text)};
+    std::ostringstream oss;
+    std::string word;
+    bool firstWord = true;
+    
+    while (iss >> word) {
+        // Very basic stemming for common English suffixes
+        size_t len = word.length();
+        
+        if (len > 3) {
+            // Handle -ing suffix
+            if (len > 4 && word.substr(len-3) == "ing") {
+                if (len > 5 && std::isalpha(word[len-4]) && std::isalpha(word[len-5])) {
+                    word = word.substr(0, len-3);
+                }
+            }
+            // Handle -ed suffix
+            else if (len > 3 && word.substr(len-2) == "ed") {
+                if (len > 4 && std::isalpha(word[len-3]) && std::isalpha(word[len-4])) {
+                    word = word.substr(0, len-2);
+                }
+            }
+            // Handle -s suffix (plural)
+            else if (word.back() == 's' && len > 3 && std::isalpha(word[len-2])) {
+                word = word.substr(0, len-1);
+            }
+        }
+        
+        if (!firstWord) {
+            oss << ' ';
+        }
+        oss << word;
+        firstWord = false;
+    }
+    
+    return oss.str();
 }
 
-} // namespace nlp
+}  // namespace nlp

@@ -1,284 +1,66 @@
 /**
  * @file ascii_word_cloud.cpp
- * @brief Implementation of the AsciiWordCloud class
+ * @brief Implements ASCII art word clouds for text visualization.
  * 
- * This file contains the implementation of methods for generating ASCII-based
- * word clouds from text data. It demonstrates functional programming using
- * recursion instead of traditional loops, and includes detailed explanations
- * of the algorithms and design choices.
+ * This file provides the implementation for generating ASCII-based word clouds
+ * that visualize the frequency of words in a collection of texts. It includes
+ * different visualization styles, color options, and customization features.
  */
 
-#include "sentiment_analysis.h"
+#include "ascii_word_cloud.h"
 #include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <random>
 #include <iomanip>
 #include <cmath>
-#include <fstream>
-#include <functional>
+#include <cctype>
 
 namespace nlp {
 
 /**
- * Generates a word cloud from a collection of texts with a specified sentiment.
+ * @brief Generates an ASCII word cloud from a collection of texts.
  * 
- * This function demonstrates a functional approach to data processing, using
- * helper functions for each step of the word cloud generation process. It handles
- * the full pipeline from word frequency counting to cloud layout and formatting.
+ * This method creates a simple ASCII visualization of word frequencies,
+ * with more frequent words appearing larger or more prominently.
  * 
- * @param texts Collection of texts with the specified sentiment
- * @param maxWords Maximum number of words to include in the cloud
- * @param width Width of the ASCII display
- * @param height Height of the ASCII display
- * @param isPositive Whether this is a positive sentiment cloud (affects colors)
- * @return Formatted ASCII word cloud as a string
+ * @param texts Collection of text documents to analyze.
+ * @param maxWords Maximum number of words to include.
+ * @param width Width of the word cloud in characters.
+ * @param height Height of the word cloud in characters.
+ * @param isPositive Whether to use positive sentiment styling.
+ * @return A string containing the ASCII word cloud.
  */
 std::string AsciiWordCloud::generateWordCloud(
-    std::span<const std::string> texts, 
+    const std::vector<std::string>& texts,
     size_t maxWords, 
     size_t width, 
     size_t height,
     bool isPositive) {
     
-    // Count word frequencies using our recursive approach
-    auto wordFreqs = countWordFrequencies(texts);
+    // Use the CloudConfig struct for configuration
+    CloudConfig config;
+    config.maxWords = maxWords;
+    config.width = width;
+    config.height = height;
+    config.useColor = true;
     
-    // Get top words by frequency
-    auto topWords = getTopWords(wordFreqs, maxWords);
-    
-    if (topWords.empty()) {
-        return "No words found to create a word cloud.";
-    }
-    
-    // Find maximum frequency
-    int maxFreq = topWords[0].second;
-    
-    // Create cloud layout
-    std::stringstream cloud;
-    
-    // Add header using a functional approach
-    const auto addHeader = [isPositive, width](std::stringstream& ss) -> void {
-        std::string sentiment = isPositive ? "POSITIVE" : "NEGATIVE";
-        ss << std::string(width/2 - 10, '*') << " " << sentiment 
-           << " WORD CLOUD " << std::string(width/2 - 10, '*') << "\n\n";
-    };
-    
-    addHeader(cloud);
-    
-    // Random number generator for positioning
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> widthDist(0, std::max(1, static_cast<int>(width - 20)));
-    
-    // Initialize cloud canvas
-    std::vector<std::string> canvas(height, std::string(width, ' '));
-    
-    // Place top words in the canvas using a recursive approach
-    const auto placeWords = [&](auto& self, const auto& words, size_t index) -> void {
-        // Base case: all words placed
-        if (index >= words.size()) {
-            return;
-        }
-        
-        const auto& [word, freq] = words[index];
-        std::string formattedWord = formatWord(word, freq, maxFreq, isPositive);
-        
-        // Try to find a position (recursive approach)
-        const auto tryPlacement = [&](auto& self, int attempt) -> bool {
-            // Base case: too many attempts
-            if (attempt >= 10) {
-                return false;
-            }
-            
-            int row = attempt % height;
-            int col = widthDist(gen);
-            
-            // Check if there's space by examining each character position
-            const auto checkSpace = [&](auto& self, size_t pos) -> bool {
-                // Base case: all positions checked and all are spaces
-                if (pos >= formattedWord.length() || col + pos >= width) {
-                    return true;
-                }
-                
-                // If non-space character found, position is not valid
-                if (canvas[row][col + pos] != ' ') {
-                    return false;
-                }
-                
-                // Recursively check next position
-                return self(self, pos + 1);
-            };
-            
-            bool hasSpace = checkSpace(checkSpace, 0);
-            
-            if (hasSpace) {
-                // Place the word by copying each character
-                const auto placeWord = [&](auto& self, size_t pos) -> void {
-                    // Base case: all characters placed or out of bounds
-                    if (pos >= formattedWord.length() || col + pos >= width) {
-                        return;
-                    }
-                    
-                    // Set character and recursively place next character
-                    canvas[row][col + pos] = formattedWord[pos];
-                    self(self, pos + 1);
-                };
-                
-                placeWord(placeWord, 0);
-                return true;
-            } else {
-                // Recursively try next placement attempt
-                return self(self, attempt + 1);
-            }
-        };
-        
-        bool placed = tryPlacement(tryPlacement, 0);
-        
-        // If we couldn't place it nicely, just append it
-        if (!placed) {
-            cloud << formattedWord << " ";
-        }
-        
-        // Recursively place next word
-        self(self, words, index + 1);
-    };
-    
-    placeWords(placeWords, topWords, 0);
-    
-    // Add canvas to output using a recursive approach
-    const auto addCanvas = [&](auto& self, size_t lineIndex) -> void {
-        // Base case: all lines added
-        if (lineIndex >= canvas.size()) {
-            return;
-        }
-        
-        // Add this line and recursively add the next
-        cloud << canvas[lineIndex] << "\n";
-        self(self, lineIndex + 1);
-    };
-    
-    addCanvas(addCanvas, 0);
-    
-    // Add legend
-    cloud << "\n" << std::string(width, '-') << "\n";
-    cloud << "Word size represents frequency. ";
-    cloud << "Based on " << texts.size() << " texts with " 
-          << (isPositive ? "positive" : "negative") << " sentiment.\n";
-    
-    return cloud.str();
+    return generateCustomCloud(texts, config, isPositive);
 }
 
 /**
- * Displays a word cloud to the console with ANSI color formatting.
+ * @brief Generates a customized ASCII word cloud.
  * 
- * This function demonstrates a visual representation of text data,
- * using color and formatting to convey frequency information. It uses
- * recursion to process and display words.
+ * This method provides more control over the word cloud generation
+ * through a configuration struct that allows setting various parameters.
  * 
- * @param texts Collection of texts with the specified sentiment
- * @param maxWords Maximum number of words to include in the cloud
- * @param width Width of the ASCII display
- * @param height Height of the ASCII display
- * @param isPositive Whether this is a positive sentiment cloud (affects colors)
- */
-void AsciiWordCloud::displayWordCloud(
-    std::span<const std::string> texts, 
-    size_t maxWords, 
-    size_t width, 
-    size_t height,
-    bool isPositive) {
-    
-    // Count word frequencies
-    auto wordFreqs = countWordFrequencies(texts);
-    
-    // Get top words
-    auto topWords = getTopWords(wordFreqs, maxWords);
-    
-    if (topWords.empty()) {
-        std::cout << "No words found to create a word cloud." << std::endl;
-        return;
-    }
-    
-    // Find maximum frequency
-    int maxFreq = topWords[0].second;
-    
-    // Add header using a functional approach
-    const auto printHeader = [isPositive, width]() -> void {
-        std::string sentiment = isPositive ? "POSITIVE" : "NEGATIVE";
-        std::string headerColor = isPositive ? "\033[1;32m" : "\033[1;31m"; // Green for positive, Red for negative
-        
-        std::cout << headerColor << std::string(width/2 - 10, '*') << " " << sentiment << " WORD CLOUD " 
-                  << std::string(width/2 - 10, '*') << resetColor() << "\n\n";
-    };
-    
-    printHeader();
-    
-    // Print words with a recursive approach
-    const auto printWords = [maxFreq, isPositive](auto& self, const auto& words, size_t index) -> void {
-        // Base case: all words printed
-        if (index >= words.size()) {
-            return;
-        }
-        
-        const auto& [word, freq] = words[index];
-        
-        // Determine size and color based on frequency
-        double normFreq = static_cast<double>(freq) / maxFreq;
-        
-        // Get color based on sentiment and frequency
-        std::string colorCode = getColorCode(freq, maxFreq, isPositive);
-        
-        // Print word with appropriate styling
-        std::cout << colorCode << std::setw(20) << std::left << word;
-        
-        // Print a bar showing frequency using recursion
-        const auto printBar = [](auto& self, int current, int total) -> void {
-            // Base case: full bar printed
-            if (current >= total) {
-                return;
-            }
-            
-            // Print bar segment and recursively print next segment
-            std::cout << "█";
-            self(self, current + 1, total);
-        };
-        
-        int barLength = static_cast<int>(30 * normFreq);
-        printBar(printBar, 0, barLength);
-        
-        // Print frequency count
-        std::cout << " " << freq << resetColor() << std::endl;
-        
-        // Recursively print next word
-        self(self, words, index + 1);
-    };
-    
-    printWords(printWords, topWords, 0);
-    
-    // Print legend
-    std::cout << std::string(width, '-') << std::endl;
-    std::cout << "Word frequency visualization for " << texts.size() << " texts with " 
-              << (isPositive ? "positive" : "negative") << " sentiment." << std::endl;
-    
-    // Add some whitespace
-    std::cout << std::endl << std::endl;
-}
-
-/**
- * Generates a word cloud with custom configuration options.
- * 
- * This function extends the basic word cloud generation with
- * additional customization options, demonstrating how to create
- * flexible, configurable components.
- * 
- * @param texts Collection of texts
- * @param config Configuration options
- * @param isPositive Whether this is a positive sentiment cloud
- * @return Generated word cloud as a string
+ * @param texts Collection of text documents to analyze.
+ * @param config Configuration options for the word cloud.
+ * @param isPositive Whether to use positive sentiment styling.
+ * @return A string containing the customized ASCII word cloud.
  */
 std::string AsciiWordCloud::generateCustomCloud(
-    std::span<const std::string> texts,
+    const std::vector<std::string>& texts,
     const CloudConfig& config,
     bool isPositive) {
     
@@ -292,279 +74,260 @@ std::string AsciiWordCloud::generateCustomCloud(
         return "No words found to create a word cloud.";
     }
     
-    // Find maximum frequency
+    // Find the maximum frequency for scaling
     int maxFreq = topWords[0].second;
     
-    // Create cloud layout
-    std::stringstream cloud;
+    // Prepare the output stream
+    std::ostringstream cloud;
     
-    // Add header
-    std::string sentiment = isPositive ? "POSITIVE" : "NEGATIVE";
-    cloud << std::string(config.width/2 - 10, '*') << " " << sentiment 
-          << " WORD CLOUD " << std::string(config.width/2 - 10, '*') << "\n\n";
+    // Add a title
+    cloud << "Word Frequency Visualization for " << texts.size() << " texts";
+    cloud << (isPositive ? " with positive sentiment." : " with negative sentiment.") << "\n\n";
     
-    // Print words based on configuration using a recursive approach
-    const auto printWords = [&](auto& self, size_t index) -> void {
-        // Base case: all words printed
-        if (index >= topWords.size()) {
-            return;
-        }
-        
-        const auto& [word, freq] = topWords[index];
-        double normFreq = static_cast<double>(freq) / maxFreq;
-        
-        // Apply formatting based on configuration
-        if (config.useColor) {
-            cloud << getColorCode(freq, maxFreq, isPositive);
-        }
-        
-        cloud << std::setw(20) << std::left << word;
-        
-        // Add frequency bar if enabled
-        if (config.useBars) {
-            int barLength = static_cast<int>(30 * normFreq);
+    // Two possible visualization styles
+    if (config.useBars) {
+        // Bar chart style
+        for (const auto& [word, freq] : topWords) {
+            // Calculate bar length scaled to width
+            int barLength = static_cast<int>(
+                (static_cast<double>(freq) / maxFreq) * (config.width - 20)
+            );
             
-            // Print bar using recursion
-            const auto printBar = [&](auto& self, int current) -> void {
-                // Base case: full bar printed
-                if (current >= barLength) {
-                    return;
-                }
-                
-                // Print bar segment and recursively print next segment
+            // Format the word and frequency
+            cloud << std::left << std::setw(15) << word;
+            cloud << " ";
+            
+            // Add the bar
+            if (config.useColor) {
+                cloud << getColorCode(freq, maxFreq, isPositive);
+            }
+            
+            for (int i = 0; i < barLength; ++i) {
                 cloud << "█";
-                self(self, current + 1);
-            };
+            }
             
-            printBar(printBar, 0);
+            if (config.useColor) {
+                cloud << resetColor();
+            }
+            
+            // Show frequency if requested
+            if (config.showFrequencies) {
+                cloud << " (" << freq << ")";
+            }
+            
+            cloud << "\n";
         }
-        
-        // Add frequency count if enabled
-        if (config.showFrequencies) {
-            cloud << " " << freq;
+    } else {
+        // Free-form cloud style (simplified version)
+        cloud << "Top Words:\n";
+        for (const auto& [word, freq] : topWords) {
+            cloud << formatWord(word, freq, maxFreq, isPositive);
+            cloud << " ";
+            
+            // Show frequency if requested
+            if (config.showFrequencies) {
+                cloud << "(" << freq << ")";
+            }
+            
+            cloud << "\n";
         }
-        
-        if (config.useColor) {
-            cloud << resetColor();
-        }
-        
-        cloud << "\n";
-        
-        // Recursively print next word
-        self(self, index + 1);
-    };
-    
-    printWords(printWords, 0);
-    
-    // Add footer
-    cloud << std::string(config.width, '-') << "\n";
-    cloud << "Word cloud based on " << texts.size() << " texts.\n";
+    }
     
     return cloud.str();
 }
 
 /**
- * Counts word frequencies in a collection of texts.
+ * @brief Displays a word cloud directly in the console.
  * 
- * This function demonstrates a recursive approach to text processing,
- * counting the frequency of each word across multiple texts. This is
- * a fundamental operation for generating word clouds.
+ * This method outputs the word cloud to the console with
+ * ANSI color formatting for visual enhancement.
  * 
- * @param texts Collection of texts
- * @return Map of words to their frequencies
+ * @param texts Collection of text documents to analyze.
+ * @param maxWords Maximum number of words to include.
+ * @param width Width of the word cloud in characters.
+ * @param height Height of the word cloud in characters.
+ * @param isPositive Whether to use positive sentiment styling.
+ */
+void AsciiWordCloud::displayWordCloud(
+    const std::vector<std::string>& texts,
+    size_t maxWords, 
+    size_t width, 
+    size_t height,
+    bool isPositive) {
+    
+    // Generate the word cloud
+    std::string cloudText = generateWordCloud(texts, maxWords, width, height, isPositive);
+    
+    // Display directly to console
+    std::cout << cloudText << std::endl;
+}
+
+/**
+ * @brief Counts the frequency of words in a collection of texts.
+ * 
+ * This method tokenizes the input texts and creates a frequency map
+ * of words, ignoring very short words (less than 3 characters).
+ * 
+ * @param texts Collection of text documents to analyze.
+ * @return Map of words to their frequency counts.
  */
 std::unordered_map<std::string, int> AsciiWordCloud::countWordFrequencies(
-    std::span<const std::string> texts) {
+    const std::vector<std::string>& texts) {
     
     std::unordered_map<std::string, int> wordFreqs;
     
-    // Process each text recursively
-    const auto processTexts = [&](auto& self, size_t textIndex) -> void {
-        // Base case: all texts processed
-        if (textIndex >= texts.size()) {
-            return;
-        }
+    // Process each text
+    for (const auto& text : texts) {
+        std::istringstream iss(text);
+        std::string word;
         
-        // Process words in this text
-        std::istringstream iss(texts[textIndex]);
-        
-        // Process each word recursively
-        const auto processWords = [&](auto& self) -> void {
-            std::string word;
-            
-            // Base case: no more words to extract
-            if (!(iss >> word)) {
-                return;
-            }
-            
-            // Only count words at least 3 characters long
+        // Count each word
+        while (iss >> word) {
+            // Filter out very short words
             if (word.length() >= 3) {
+                // Convert to lowercase for consistent counting
+                std::transform(word.begin(), word.end(), word.begin(),
+                              [](unsigned char c) { return std::tolower(c); });
+                
+                // Increment frequency
                 wordFreqs[word]++;
             }
-            
-            // Recursively process next word
-            self(self);
-        };
-        
-        processWords(processWords);
-        
-        // Recursively process next text
-        self(self, textIndex + 1);
-    };
-    
-    processTexts(processTexts, 0);
+        }
+    }
     
     return wordFreqs;
 }
 
 /**
- * Gets the top N words by frequency.
+ * @brief Extracts the most frequent words from a frequency map.
  * 
- * This function demonstrates sorting and filtering operations in
- * a functional style, using recursion for data transformation.
+ * This method sorts words by frequency and returns the top N words.
  * 
- * @param wordFreqs Word frequency map
- * @param maxWords Maximum number of words to include
- * @return Vector of (word, frequency) pairs, sorted by frequency
+ * @param wordFreqs Map of words to their frequencies.
+ * @param maxWords Maximum number of words to return.
+ * @return Vector of (word, frequency) pairs sorted by frequency.
  */
 std::vector<std::pair<std::string, int>> AsciiWordCloud::getTopWords(
     const std::unordered_map<std::string, int>& wordFreqs, 
     size_t maxWords) {
     
     // Convert map to vector for sorting
-    std::vector<std::pair<std::string, int>> words;
-    words.reserve(wordFreqs.size());
+    std::vector<std::pair<std::string, int>> sortedWords(wordFreqs.begin(), wordFreqs.end());
     
-    // Transfer words recursively
-    const auto transferWords = [&](auto& self, auto it) -> void {
-        // Base case: all words transferred
-        if (it == wordFreqs.end()) {
-            return;
-        }
-        
-        // Add this word-frequency pair
-        words.push_back(*it);
-        
-        // Recursively transfer next word
-        self(self, std::next(it));
-    };
+    // Sort by frequency (descending)
+    std::sort(sortedWords.begin(), sortedWords.end(), 
+             [](const auto& a, const auto& b) {
+                 return a.second > b.second;
+             });
     
-    transferWords(transferWords, wordFreqs.begin());
-    
-    // Sort by frequency (descending) using a custom comparator
-    std::sort(words.begin(), words.end(),
-              [](const auto& a, const auto& b) { return a.second > b.second; });
-    
-    // Limit to top N words
-    if (words.size() > maxWords) {
-        words.resize(maxWords);
+    // Limit to maxWords
+    if (sortedWords.size() > maxWords) {
+        sortedWords.resize(maxWords);
     }
     
-    return words;
+    return sortedWords;
 }
 
 /**
- * Formats a word with ASCII art based on its frequency.
+ * @brief Formats a word for display in the word cloud.
  * 
- * This function demonstrates string manipulation and visual formatting
- * in a functional style. It applies emphasis and decorations to words
- * based on their frequency in the corpus.
+ * This method applies styling to words based on their frequency,
+ * such as varying the font weight or using different characters.
  * 
- * @param word The word to format
- * @param freq The word's frequency
- * @param maxFreq The maximum frequency in the set
- * @param isPositive Whether this is for a positive sentiment cloud
- * @return Formatted word with ASCII art
+ * @param word The word to format.
+ * @param freq The word's frequency.
+ * @param maxFreq The maximum frequency in the dataset.
+ * @param isPositive Whether to use positive sentiment styling.
+ * @return Formatted word string with styling.
  */
 std::string AsciiWordCloud::formatWord(
-    std::string_view word, 
+    const std::string& word, 
     int freq, 
     int maxFreq,
     bool isPositive) {
     
-    // Calculate relative font size (1-5)
-    double normFreq = static_cast<double>(freq) / maxFreq;
-    int fontSize = 1 + static_cast<int>(normFreq * 4);
+    std::ostringstream formatted;
     
-    // Symbols to use for emphasis
-    std::vector<std::string> symbols = {".", "~", "*", "%", "#"};
-    std::string symbol = symbols[fontSize - 1];
+    // Apply color coding based on frequency
+    formatted << getColorCode(freq, maxFreq, isPositive);
     
-    // Format based on font size using a functional approach
-    std::stringstream formatted;
+    // Format the word based on relative frequency
+    double relativeFreq = static_cast<double>(freq) / maxFreq;
     
-    // Add emphasis symbols recursively
-    const auto addEmphasis = [&](auto& self, int level) -> void {
-        // Base case: all emphasis added
-        if (level <= 0) {
-            return;
-        }
-        
-        // Add emphasis and recursively continue
-        formatted << symbol;
-        self(self, level - 1);
-    };
+    if (relativeFreq > 0.8) {
+        // Very common words - uppercase and bold
+        std::string upperWord = word;
+        std::transform(upperWord.begin(), upperWord.end(), upperWord.begin(),
+                      [](unsigned char c) { return std::toupper(c); });
+        formatted << upperWord;
+    } else if (relativeFreq > 0.5) {
+        // Common words - uppercase
+        std::string upperWord = word;
+        std::transform(upperWord.begin(), upperWord.end(), upperWord.begin(),
+                      [](unsigned char c) { return std::toupper(c); });
+        formatted << upperWord;
+    } else if (relativeFreq > 0.3) {
+        // Moderately common words - normal
+        formatted << word;
+    } else {
+        // Less common words - small
+        formatted << word;
+    }
     
-    // Add prefix emphasis
-    addEmphasis(addEmphasis, fontSize >= 3 ? 2 : 1);
-    
-    // Add the word itself
-    formatted << word;
-    
-    // Add suffix emphasis
-    addEmphasis(addEmphasis, fontSize >= 3 ? 2 : 1);
+    // Reset the color
+    formatted << resetColor();
     
     return formatted.str();
 }
 
 /**
- * Gets ANSI color code for a word based on its frequency and sentiment.
+ * @brief Generates an ANSI color code based on word frequency.
  * 
- * This function demonstrates how to provide visual feedback using terminal
- * colors, with selection based on multiple criteria (frequency and sentiment).
+ * This method selects colors that vary based on the word's frequency
+ * and the sentiment context (positive or negative).
  * 
- * @param freq Word frequency
- * @param maxFreq Maximum frequency in set
- * @param isPositive Whether this is for a positive sentiment cloud
- * @return ANSI color code
+ * @param freq The word's frequency.
+ * @param maxFreq The maximum frequency in the dataset.
+ * @param isPositive Whether to use positive sentiment coloring.
+ * @return ANSI color code string.
  */
 std::string AsciiWordCloud::getColorCode(int freq, int maxFreq, bool isPositive) {
-    double normFreq = static_cast<double>(freq) / maxFreq;
+    double relativeFreq = static_cast<double>(freq) / maxFreq;
     
-    // Color intensity based on frequency (0-5)
-    int intensity = static_cast<int>(normFreq * 5);
+    // Scale: 0-6 represents different intensities
+    int colorScale = static_cast<int>(relativeFreq * 6);
     
-    // A purely functional approach would use a map or recursive function
-    // to select the color, but a simple switch is clearer here
+    // ANSI color codes
     if (isPositive) {
-        // Green shades for positive sentiment
-        switch (intensity) {
-            case 0: return "\033[32m";       // Dark green
-            case 1: return "\033[1;32m";     // Bold green
-            case 2: return "\033[1;92m";     // Bold light green
-            case 3: return "\033[1;92m";     // Bold light green
-            case 4: return "\033[1;92;4m";   // Bold light green, underlined
-            default: return "\033[1;92;4m";  // Bold light green, underlined
+        // Blue to green scale for positive sentiment
+        switch (colorScale) {
+            case 0: return "\033[38;5;39m";  // Light blue
+            case 1: return "\033[38;5;38m";
+            case 2: return "\033[38;5;37m";
+            case 3: return "\033[38;5;36m";
+            case 4: return "\033[38;5;35m";
+            case 5: return "\033[38;5;34m";
+            case 6: return "\033[38;5;46m";  // Bright green
+            default: return "\033[38;5;39m"; // Default light blue
         }
     } else {
-        // Red shades for negative sentiment
-        switch (intensity) {
-            case 0: return "\033[31m";       // Dark red
-            case 1: return "\033[1;31m";     // Bold red
-            case 2: return "\033[1;91m";     // Bold light red
-            case 3: return "\033[1;91m";     // Bold light red
-            case 4: return "\033[1;91;4m";   // Bold light red, underlined
-            default: return "\033[1;91;4m";  // Bold light red, underlined
+        // Red to yellow scale for negative sentiment
+        switch (colorScale) {
+            case 0: return "\033[38;5;196m"; // Bright red
+            case 1: return "\033[38;5;202m";
+            case 2: return "\033[38;5;208m";
+            case 3: return "\033[38;5;214m";
+            case 4: return "\033[38;5;220m";
+            case 5: return "\033[38;5;226m";
+            case 6: return "\033[38;5;227m"; // Yellow
+            default: return "\033[38;5;196m"; // Default bright red
         }
     }
 }
 
 /**
- * Resets ANSI color formatting.
- * 
- * A simple utility function to reset terminal color settings.
- * 
- * @return ANSI reset code
+ * @brief Provides the ANSI code to reset text formatting.
+ * @return ANSI reset code string.
  */
 std::string AsciiWordCloud::resetColor() {
     return "\033[0m";

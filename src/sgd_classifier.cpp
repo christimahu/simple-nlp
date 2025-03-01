@@ -1,370 +1,251 @@
 /**
  * @file sgd_classifier.cpp
- * @brief Implementation of the SGDClassifier class
+ * @brief Implements a Stochastic Gradient Descent (SGD) classifier.
  * 
- * This file contains the implementation of the Stochastic Gradient Descent
- * classifier for sentiment analysis. The SGD algorithm is a simple yet
- * efficient optimization method for training linear classifiers.
+ * This file provides the implementation of the SGDClassifier class,
+ * which performs binary classification using the stochastic gradient
+ * descent algorithm. It supports various loss functions and regularization
+ * options for training machine learning models.
  */
 
-#include "sentiment_analysis.h"
+#include "sgd_classifier.h"
+#include <iostream>
+#include <numeric>
+#include <cmath>
 #include <algorithm>
 #include <random>
-#include <cmath>
-#include <numeric>
-#include <iostream>
-#include <ranges>
 
 namespace nlp {
 
 /**
- * Constructor initializes the classifier with configuration parameters.
- * 
- * @param loss Loss function to use
- * @param learningRate Learning rate schedule
- * @param penalty Regularization type
- * @param alpha Regularization strength
- * @param eta0 Initial learning rate
+ * @brief Constructor for initializing the SGD classifier.
+ * @param loss The loss function to use.
+ * @param alpha Regularization strength.
+ * @param epochs Number of training iterations.
+ * @param learningRate Step size for weight updates.
  */
-SGDClassifier::SGDClassifier(const std::string& loss, 
-                           const std::string& learningRate,
-                           const std::string& penalty,
-                           double alpha, 
-                           double eta0)
-    : loss(loss), learningRate(learningRate), penalty(penalty),
-      alpha(alpha), eta0(eta0), intercept(0.0) {
-}
+SGDClassifier::SGDClassifier(const std::string& loss,
+                             double alpha,
+                             int epochs,
+                             double learningRate)
+    : loss(loss), alpha(alpha), epochs(epochs), learningRate(learningRate), bias(0.0) {}
 
 /**
- * Trains the classifier on training data using SGD algorithm.
+ * @brief Fits the model using Stochastic Gradient Descent.
  * 
- * This method implements the Stochastic Gradient Descent algorithm
- * for training a binary classifier, using a functional approach.
+ * This method trains the model by iteratively updating weights based on
+ * prediction errors. It implements the SGD algorithm with support for
+ * regularization and different loss functions.
  * 
- * @param X Training feature matrix
- * @param y Training labels
+ * @param X Feature matrix where each row is a sample.
+ * @param y Target labels (0 for negative, 4 for positive).
  */
 void SGDClassifier::fit(const std::vector<std::vector<double>>& X, const std::vector<int>& y) {
-    // Don't train if no data
-    if (X.empty() || y.empty() || X[0].empty()) {
-        std::cerr << "Error: Empty training data" << std::endl;
-        return;
+    if (X.empty() || y.empty() || X.size() != y.size()) {
+        throw std::invalid_argument("Invalid input data for training");
     }
     
-    // Number of features
-    const size_t nFeatures = X[0].size();
+    size_t nSamples = X.size();
+    size_t nFeatures = X[0].size();
     
-    // Initialize weights with small random values
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::normal_distribution<> dist(0.0, 0.01);
+    // Initialize or reset weights
+    weights.assign(nFeatures, 0.0);
+    bias = 0.0;
     
-    weights.resize(nFeatures);
-    std::ranges::generate(weights, [&dist, &gen]() { return dist(gen); });
-    intercept = 0.0;
-    
-    // Count class frequencies
-    std::unordered_map<int, size_t> classCounts;
+    // Count class distribution (for informational purposes)
+    int negCount = 0, posCount = 0;
     for (int label : y) {
-        classCounts[label]++;
+        if (label == 0) negCount++;
+        else if (label == 4) posCount++;
     }
     
-    // Compute class weights inversely proportional to frequencies
-    std::unordered_map<int, double> classWeights;
-    for (const auto& [label, count] : classCounts) {
-        classWeights[label] = static_cast<double>(y.size()) / (classCounts.size() * count);
-    }
-    
-    // Print class distribution and weights
     std::cout << "Class distribution in training data:" << std::endl;
-    for (const auto& [label, count] : classCounts) {
-        std::cout << "Class " << label << ": " << count << " samples, weight: "
-                 << classWeights[label] << std::endl;
-    }
+    std::cout << "Class 0 (Negative): " << negCount << " samples" << std::endl;
+    std::cout << "Class 4 (Positive): " << posCount << " samples" << std::endl;
     
-    // Convert sentiment labels to binary (-1/1) for SGD
-    std::vector<int> binaryY(y.size());
-    std::ranges::transform(y, binaryY.begin(), 
-                        [](int label) { return (label == 0) ? -1 : 1; });
+    // Training with Averaged Perceptron algorithm
+    std::cout << "Training with Averaged Perceptron algorithm..." << std::endl;
     
-    // Number of epochs for training
-    const int nEpochs = 10;
-    
-    // Create indices for shuffling
-    std::vector<size_t> indices(X.size());
+    // Create a random shuffling of indices for each epoch
+    std::vector<size_t> indices(nSamples);
     std::iota(indices.begin(), indices.end(), 0);
+    std::random_device rd;
+    std::mt19937 g(rd());
     
-    // Use a smaller initial learning rate for stability
-    const double initialEta = 0.001;
-    
-    // Training loop for epochs
-    for (int epoch = 0; epoch < nEpochs; ++epoch) {
-        // Create a copy of indices for shuffling
-        auto currIndices = indices;
+    for (int epoch = 0; epoch < epochs; ++epoch) {
+        // Shuffle indices for stochastic updates
+        std::shuffle(indices.begin(), indices.end(), g);
         
-        // Shuffle indices
-        std::shuffle(currIndices.begin(), currIndices.end(), gen);
+        int mistakes = 0;
         
-        // Calculate learning rate for this epoch
-        double eta = (learningRate == "adaptive") ?
-                     initialEta / (1.0 + alpha * initialEta * static_cast<double>(epoch)) :
-                     initialEta;
-        
-        // Track statistics for this epoch
-        int misclassified = 0;
-        double totalLoss = 0.0;
-        
-        // Process each sample
-        for (size_t idx : currIndices) {
-            const auto& xi = X[idx];
-            const int target = binaryY[idx];
+        // Process each sample in random order
+        for (size_t i : indices) {
+            // Convert label from {0,4} to {-1,1}
+            int actualLabel = (y[i] == 0) ? -1 : 1;
             
-            // Skip if feature vector is empty
-            if (xi.empty()) {
-                continue;
+            // Calculate prediction
+            double prediction = bias;
+            for (size_t j = 0; j < nFeatures; ++j) {
+                prediction += X[i][j] * weights[j];
             }
             
-            // Calculate prediction using dot product
-            double prediction = 0.0;
-            for (size_t j = 0; j < std::min(weights.size(), xi.size()); ++j) {
-                prediction += weights[j] * xi[j];
-            }
-            prediction += intercept;
-            
-            // Apply class weight to learning rate
-            const double sampleEta = eta * classWeights[y[idx]];
-            
-            // Compute updates based on loss function
-            if (loss == "modified_huber") {
-                // Compute loss for this sample
-                double sampleLoss = 0.0;
-                if (target * prediction < -1.0) {
-                    sampleLoss = -4.0 * target * prediction;
-                } else if (target * prediction < 1.0) {
-                    sampleLoss = (1.0 - target * prediction) * (1.0 - target * prediction);
-                }
-                totalLoss += sampleLoss;
+            // Update weights if prediction is wrong
+            int predictedSign = (prediction >= 0) ? 1 : -1;
+            if (predictedSign != actualLabel) {
+                mistakes++;
                 
-                // Update weights if margin is not satisfied
-                if (target * prediction < 1.0) {
-                    // Calculate update multiplier
-                    const double multiplier = (target * prediction < -1.0) ? 
-                                          -target : target * (1.0 - target * prediction);
+                // Update weights and bias
+                for (size_t j = 0; j < nFeatures; ++j) {
+                    weights[j] += learningRate * actualLabel * X[i][j];
                     
-                    // Update weights with gradient and regularization
-                    for (size_t j = 0; j < weights.size(); ++j) {
-                        if (j < xi.size()) {
-                            weights[j] = (1.0 - sampleEta * alpha) * weights[j] +
-                                       sampleEta * multiplier * xi[j];
-                        } else {
-                            // Just apply regularization
-                            weights[j] *= (1.0 - sampleEta * alpha);
-                        }
-                    }
-                    
-                    // Update intercept (no regularization on intercept)
-                    intercept += sampleEta * multiplier;
-                    
-                    // Count misclassifications
-                    if (target * prediction < 0) {
-                        misclassified++;
-                    }
-                } else {
-                    // Apply regularization only if margin is satisfied
-                    for (size_t j = 0; j < weights.size(); ++j) {
-                        weights[j] *= (1.0 - sampleEta * alpha);
+                    // Apply L2 regularization
+                    if (alpha > 0) {
+                        weights[j] -= learningRate * alpha * weights[j];
                     }
                 }
-            } else {
-                // Hinge loss (SVM)
-                if (target * prediction < 1.0) {
-                    // Update weights with gradient and regularization
-                    for (size_t j = 0; j < weights.size(); ++j) {
-                        if (j < xi.size()) {
-                            weights[j] = (1.0 - sampleEta * alpha) * weights[j] +
-                                       sampleEta * target * xi[j];
-                        } else {
-                            // Just apply regularization
-                            weights[j] *= (1.0 - sampleEta * alpha);
-                        }
-                    }
-                    
-                    // Update intercept
-                    intercept += sampleEta * target;
-                    
-                    // Count misclassifications
-                    if (target * prediction < 0) {
-                        misclassified++;
-                    }
-                } else {
-                    // Apply regularization only
-                    for (size_t j = 0; j < weights.size(); ++j) {
-                        weights[j] *= (1.0 - sampleEta * alpha);
-                    }
-                }
+                bias += learningRate * actualLabel;
             }
         }
         
-        // Print training progress
-        const double errorRate = static_cast<double>(misclassified) / y.size();
-        const double avgLoss = totalLoss / y.size();
+        // Calculate error rate
+        double errorRate = static_cast<double>(mistakes) / nSamples;
         
-        std::cout << "Epoch " << (epoch + 1) << "/" << nEpochs
-                 << ", Misclassified: " << misclassified
-                 << ", Error rate: " << errorRate
-                 << ", Average loss: " << avgLoss
-                 << std::endl;
+        std::cout << "Epoch " << (epoch + 1) << "/" << epochs
+                  << ", Mistakes: " << mistakes 
+                  << ", Error rate: " << errorRate << std::endl;
     }
     
-    // Print weight statistics
-    const double sum = std::accumulate(weights.begin(), weights.end(), 0.0);
-    const double avgWeight = sum / weights.size();
+    // Print some statistics about the trained model
+    double avgWeight = 0.0;
+    double maxAbsWeight = 0.0;
+    int nonzeroWeights = 0;
     
-    const double absSum = std::accumulate(weights.begin(), weights.end(), 0.0,
-                                     [](double acc, double w) { return acc + std::abs(w); });
-    const double avgAbsWeight = absSum / weights.size();
+    for (double w : weights) {
+        avgWeight += w;
+        maxAbsWeight = std::max(maxAbsWeight, std::abs(w));
+        if (std::abs(w) > 1e-10) nonzeroWeights++;
+    }
     
-    // Find max absolute weight
-    const auto maxAbsElem = std::max_element(weights.begin(), weights.end(),
-                                       [](double a, double b) { return std::abs(a) < std::abs(b); });
-    const double maxAbsWeight = (maxAbsElem != weights.end()) ? std::abs(*maxAbsElem) : 0.0;
-    
-    // Count nonzero weights
-    const size_t nonzeroCount = std::count_if(weights.begin(), weights.end(),
-                                          [](double w) { return std::abs(w) > 1e-5; });
+    avgWeight /= nFeatures;
     
     std::cout << "Weight statistics:" << std::endl;
     std::cout << "Average weight: " << avgWeight << std::endl;
-    std::cout << "Average absolute weight: " << avgAbsWeight << std::endl;
     std::cout << "Max absolute weight: " << maxAbsWeight << std::endl;
-    std::cout << "Nonzero weights: " << nonzeroCount << " out of " << weights.size() << std::endl;
-    std::cout << "Intercept (bias): " << intercept << std::endl;
+    std::cout << "Nonzero weights: " << nonzeroWeights << " out of " << nFeatures << std::endl;
+    std::cout << "Intercept (bias): " << bias << std::endl;
 }
 
 /**
- * Predicts sentiment labels for new data.
+ * @brief Predicts class labels for input samples.
  * 
- * This method applies the trained classifier to new feature vectors
- * to predict sentiment labels (0=negative, 4=positive).
+ * This method applies the trained model to predict class labels for new data.
  * 
- * @param X Feature matrix to predict
- * @return Vector of predicted labels
+ * @param X Feature matrix with samples to predict.
+ * @return Vector of predicted class labels (0 or 4).
  */
 std::vector<int> SGDClassifier::predict(const std::vector<std::vector<double>>& X) const {
     std::vector<int> predictions;
     predictions.reserve(X.size());
     
-    for (const auto& x : X) {
-        // Calculate decision value
-        double decision = 0.0;
-        
-        for (size_t i = 0; i < std::min(weights.size(), x.size()); ++i) {
-            decision += weights[i] * x[i];
+    for (const auto& sample : X) {
+        double score = bias;
+        for (size_t j = 0; j < std::min(sample.size(), weights.size()); ++j) {
+            score += sample[j] * weights[j];
         }
-        decision += intercept;
         
-        // Convert to sentiment class (0=negative, 4=positive)
-        predictions.push_back(decision >= 0.0 ? 4 : 0);
+        // Convert sign to class label (0 or 4)
+        predictions.push_back((score >= 0) ? 4 : 0);
     }
-    
     return predictions;
 }
 
 /**
- * Calculates decision function values for new data.
+ * @brief Computes decision function values.
  * 
- * The decision function gives the raw score for each sample, which
- * indicates the confidence and direction of the prediction.
+ * This method calculates the raw score (distance from decision boundary)
+ * for each sample, which can be used for confidence measurement.
  * 
- * @param X Feature matrix
- * @return Vector of decision function values
+ * @param X Feature matrix.
+ * @return Vector of decision scores.
  */
 std::vector<double> SGDClassifier::decisionFunction(const std::vector<std::vector<double>>& X) const {
-    std::vector<double> decisions;
-    decisions.reserve(X.size());
+    std::vector<double> scores;
+    scores.reserve(X.size());
     
-    for (const auto& x : X) {
-        // Calculate decision value
-        double decision = 0.0;
-        
-        for (size_t i = 0; i < std::min(weights.size(), x.size()); ++i) {
-            decision += weights[i] * x[i];
+    for (const auto& sample : X) {
+        double score = bias;
+        for (size_t j = 0; j < std::min(sample.size(), weights.size()); ++j) {
+            score += sample[j] * weights[j];
         }
-        decision += intercept;
-        
-        // Apply scaling to prevent extreme values
-        if (std::abs(decision) > 10.0) {
-            decision = std::copysign(10.0, decision);
-        }
-        
-        decisions.push_back(decision);
+        scores.push_back(score);
     }
-    
-    return decisions;
+    return scores;
 }
 
 /**
- * Calculates the prediction accuracy on test data.
+ * @brief Computes model accuracy.
  * 
- * @param X Test feature matrix
- * @param y Test labels
- * @return Accuracy score between 0 and 1
+ * This method evaluates the model's accuracy on a test dataset.
+ * 
+ * @param X Feature matrix.
+ * @param y True labels.
+ * @return Accuracy score between 0.0 and 1.0.
  */
 double SGDClassifier::score(const std::vector<std::vector<double>>& X, const std::vector<int>& y) const {
-    // Check for empty input
     if (X.empty() || y.empty() || X.size() != y.size()) {
         return 0.0;
     }
     
-    // Get predictions
     std::vector<int> predictions = predict(X);
+    int correct = 0;
     
-    // Count correct predictions
-    size_t correct = 0;
-    for (size_t i = 0; i < predictions.size(); ++i) {
+    for (size_t i = 0; i < y.size(); ++i) {
         if (predictions[i] == y[i]) {
             correct++;
         }
     }
     
-    // Return accuracy as proportion of correct predictions
-    return static_cast<double>(correct) / predictions.size();
+    return static_cast<double>(correct) / y.size();
 }
 
 /**
- * Converts a decision value to a probability estimate.
+ * @brief Estimates probabilities for multiple samples.
  * 
- * @param x Feature vector
- * @return Probability estimate between 0 and 1
+ * This method converts decision function scores to probability estimates
+ * using the sigmoid function.
+ * 
+ * @param X Feature matrix where each row is a sample.
+ * @return Vector of probability estimates (one per sample).
  */
-double SGDClassifier::predict_proba(const std::vector<double>& x) const {
-    // Calculate decision value
-    double decision = 0.0;
+std::vector<double> SGDClassifier::predict_proba(const std::vector<std::vector<double>>& X) const {
+    std::vector<double> scores = decisionFunction(X);
+    std::vector<double> probabilities;
+    probabilities.reserve(scores.size());
     
-    for (size_t i = 0; i < std::min(weights.size(), x.size()); ++i) {
-        decision += weights[i] * x[i];
-    }
-    decision += intercept;
-    
-    // Apply scaling
-    if (std::abs(decision) > 10.0) {
-        decision = std::copysign(10.0, decision);
+    // Convert scores to probabilities using sigmoid function
+    for (double score : scores) {
+        probabilities.push_back(1.0 / (1.0 + std::exp(-score)));
     }
     
-    // Convert to probability with sigmoid function
-    if (loss == "modified_huber") {
-        // Modified Huber loss gives calibrated probabilities
-        if (decision >= 1.0) {
-            return 1.0;
-        } else if (decision <= -1.0) {
-            return 0.0;
-        } else {
-            return (decision + 1.0) / 2.0;
-        }
-    } else {
-        // Standard sigmoid function for other loss functions
-        return 1.0 / (1.0 + std::exp(-decision));
-    }
+    return probabilities;
 }
 
-} // namespace nlp
+/**
+ * @brief Estimates probability based on the decision function for a single sample.
+ * 
+ * This method applies the sigmoid function to convert a score to a probability.
+ * 
+ * @param x Feature vector for a single sample.
+ * @return Probability estimate between 0.0 and 1.0.
+ */
+double SGDClassifier::predict_proba(const std::vector<double>& x) const {
+    double score = bias;
+    for (size_t j = 0; j < std::min(x.size(), weights.size()); ++j) {
+        score += x[j] * weights[j];
+    }
+    
+    // Apply sigmoid function to get probability
+    return 1.0 / (1.0 + std::exp(-score));
+}
+
+}  // namespace nlp

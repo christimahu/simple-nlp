@@ -1,13 +1,13 @@
 /**
  * @file sentiment_dataset.cpp
- * @brief Implementation of the SentimentDataset class
+ * @brief Implementation of the SentimentDataset class.
  * 
  * This file contains the implementation of methods for the SentimentDataset class,
- * which handles data management and organization for sentiment analysis. It uses
+ * which handles data management and organization for sentiment analysis. It follows
  * a functional programming approach with recursion instead of traditional loops.
  */
 
-#include "sentiment_analysis.h"
+#include "sentiment_dataset.h"
 #include <algorithm>
 #include <functional>
 #include <sstream>
@@ -15,10 +15,27 @@
 namespace nlp {
 
 /**
- * Get training texts based on trainIndices.
+ * @brief Constructor with initial data.
  * 
- * This method demonstrates dataset manipulation and subset extraction
- * using recursion instead of loops.
+ * Initializes a dataset with sentiment-text pairs.
+ * 
+ * @param data Vector of (sentiment_label, text) pairs
+ */
+SentimentDataset::SentimentDataset(std::vector<std::pair<int, std::string>> data)
+    : data(std::move(data)) {
+    
+    // Extract labels
+    labels.reserve(this->data.size());
+    for (const auto& [sentiment, _] : this->data) {
+        labels.push_back(sentiment);
+    }
+}
+
+/**
+ * @brief Get training texts based on train indices.
+ * 
+ * This method uses recursion to extract training texts from the dataset
+ * based on the train indices.
  * 
  * @return Vector of training texts
  */
@@ -49,10 +66,10 @@ std::vector<std::string> SentimentDataset::getTrainTexts() const {
 }
 
 /**
- * Get test texts based on testIndices.
+ * @brief Get test texts based on test indices.
  * 
- * This method demonstrates dataset manipulation and subset extraction
- * using recursion instead of loops.
+ * This method uses recursion to extract test texts from the dataset
+ * based on the test indices.
  * 
  * @return Vector of test texts
  */
@@ -83,10 +100,10 @@ std::vector<std::string> SentimentDataset::getTestTexts() const {
 }
 
 /**
- * Get training labels based on trainIndices.
+ * @brief Get training labels based on train indices.
  * 
- * This method demonstrates dataset manipulation and subset extraction
- * using recursion instead of loops.
+ * This method uses recursion to extract training labels from the dataset
+ * based on the train indices.
  * 
  * @return Vector of training labels
  */
@@ -117,10 +134,10 @@ std::vector<int> SentimentDataset::getTrainLabels() const {
 }
 
 /**
- * Get test labels based on testIndices.
+ * @brief Get test labels based on test indices.
  * 
- * This method demonstrates dataset manipulation and subset extraction
- * using recursion instead of loops.
+ * This method uses recursion to extract test labels from the dataset
+ * based on the test indices.
  * 
  * @return Vector of test labels
  */
@@ -151,10 +168,10 @@ std::vector<int> SentimentDataset::getTestLabels() const {
 }
 
 /**
- * Get texts with a specific sentiment from the dataset.
+ * @brief Get texts with a specific sentiment from the dataset.
  * 
- * This method demonstrates filtering operation using recursion
- * to select texts with a particular sentiment label.
+ * This method uses recursion to filter texts with a particular sentiment
+ * label from the dataset.
  * 
  * @param sentiment Sentiment value (0=negative, 4=positive)
  * @return Vector of texts with the specified sentiment
@@ -184,7 +201,7 @@ std::vector<std::string> SentimentDataset::getTextsWithSentiment(int sentiment) 
 }
 
 /**
- * Get feature vectors for training data.
+ * @brief Get feature vectors for training data.
  * 
  * This method retrieves feature vectors for training examples
  * using the train indices.
@@ -218,7 +235,7 @@ std::vector<std::vector<double>> SentimentDataset::getTrainFeatures() const {
 }
 
 /**
- * Get feature vectors for test data.
+ * @brief Get feature vectors for test data.
  * 
  * This method retrieves feature vectors for test examples
  * using the test indices.
