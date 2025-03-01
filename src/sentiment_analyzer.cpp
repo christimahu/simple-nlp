@@ -9,6 +9,14 @@
  */
 
 #include "sentiment_analysis.h"
+#include "text_preprocessor.h"
+#include "tfidf_vectorizer.h"
+#include "classifier_model.h"
+#include "sgd_classifier.h"
+#include "model_evaluator.h"
+#include "ascii_word_cloud.h"
+#include "sentiment_dataset.h"
+
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -16,6 +24,7 @@
 #include <algorithm>
 #include <chrono>
 #include <stdexcept>
+#include <iomanip>
 
 namespace nlp {
 
