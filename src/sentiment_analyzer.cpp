@@ -109,7 +109,7 @@ std::optional<SentimentDataset> SentimentAnalyzer::loadData(const std::string& f
         return std::nullopt;
     }
     
-    SentimentDataset dataset;
+    std::vector<std::pair<int, std::string>> dataRows;
     std::string line;
     bool isHeader = true;
     
@@ -141,17 +141,12 @@ std::optional<SentimentDataset> SentimentAnalyzer::loadData(const std::string& f
         }
         
         // Add to dataset
-        dataset.data.emplace_back(sentiment, token);
+        dataRows.emplace_back(sentiment, token);
     }
     
-    std::cout << "Loaded dataset with " << dataset.data.size() << " rows" << std::endl;
+    std::cout << "Loaded dataset with " << dataRows.size() << " rows" << std::endl;
     
-    // Extract labels for convenience
-    for (const auto& [sentiment, _] : dataset.data) {
-        dataset.labels.push_back(sentiment);
-    }
-    
-    return dataset;
+    return SentimentDataset(dataRows);
 }
 
 /**
@@ -433,6 +428,9 @@ bool SentimentAnalyzer::generateWordCloud(
         return false;
     }
     
+    // Create an instance of AsciiWordCloud
+    AsciiWordCloud wordCloud;
+    
     // Configure word cloud
     AsciiWordCloud::CloudConfig config;
     config.maxWords = 30;
@@ -443,7 +441,7 @@ bool SentimentAnalyzer::generateWordCloud(
     
     // Generate word cloud
     bool isPositive = (sentiment == 4);
-    std::string cloud = AsciiWordCloud::generateCustomCloud(
+    std::string cloud = wordCloud.generateCustomCloud(
         filteredTexts, config, isPositive);
     
     // Display the word cloud

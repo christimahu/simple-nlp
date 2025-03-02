@@ -109,18 +109,18 @@ add_test(NAME sgd_classifier_test COMMAND sgd_classifier_test)
 add_test(NAME model_evaluator_test COMMAND model_evaluator_test)
 add_test(NAME sentiment_analyzer_test COMMAND sentiment_analyzer_test)
 
-# Examples are commented out for now to prevent build errors
-# add_executable(run_pipeline ${EXAMPLES_DIR}/run_pipeline.cpp)
-# target_link_libraries(run_pipeline PRIVATE nlp_sentiment)
+# Add the example applications
+add_executable(simple_sentiment ${EXAMPLES_DIR}/simple_sentiment.cpp)
+target_link_libraries(simple_sentiment PRIVATE nlp_sentiment)
 
-# add_executable(file_analyzer ${EXAMPLES_DIR}/file_analyzer.cpp)
-# target_link_libraries(file_analyzer PRIVATE nlp_sentiment)
+add_executable(word_cloud ${EXAMPLES_DIR}/word_cloud.cpp)
+target_link_libraries(word_cloud PRIVATE nlp_sentiment)
 
-# add_executable(word_cloud ${EXAMPLES_DIR}/word_cloud.cpp)
-# target_link_libraries(word_cloud PRIVATE nlp_sentiment)
+add_executable(file_analyzer ${EXAMPLES_DIR}/file_analyzer.cpp)
+target_link_libraries(file_analyzer PRIVATE nlp_sentiment)
 
-# add_executable(simple_sentiment ${EXAMPLES_DIR}/simple_sentiment.cpp)
-# target_link_libraries(simple_sentiment PRIVATE nlp_sentiment)
+add_executable(run_pipeline ${EXAMPLES_DIR}/run_pipeline.cpp)
+target_link_libraries(run_pipeline PRIVATE nlp_sentiment)
 
 # Generate and install CMake package config
 include(CMakePackageConfigHelpers)

@@ -4,10 +4,10 @@
  * 
  * This example demonstrates how to use the AsciiWordCloud class
  * to visualize text data. It shows various customization options
- * and different ways to generate word clouds.
+ * and different ways to generate word clouds for text analysis.
  */
 
-#include "sentiment_analysis.h"
+#include "ascii_word_cloud.h"
 #include <iostream>
 #include <vector>
 #include <string>
@@ -17,13 +17,13 @@
  * Function to demonstrate various word cloud features.
  * 
  * This function shows how to generate different types of
- * word clouds using the AsciiWordCloud class. It demonstrates
- * customization options and visualization techniques.
+ * word clouds, customize their appearance, and save them to files.
+ * It demonstrates both positive and negative sentiment visualizations.
  */
 void wordCloudDemo() {
     std::cout << "==== ASCII Word Cloud Demo ====" << std::endl;
     
-    // Create sample text data
+    // Create sample text data for positive sentiment
     std::vector<std::string> positiveTexts = {
         "amazing fantastic wonderful excellent great awesome",
         "amazing excellent helpful responsive service support",
@@ -32,6 +32,7 @@ void wordCloudDemo() {
         "great value worth every penny excellent purchase"
     };
     
+    // Create sample text data for negative sentiment
     std::vector<std::string> negativeTexts = {
         "terrible horrible awful disappointing frustrating",
         "terrible quality broken defective waste money",
@@ -40,14 +41,17 @@ void wordCloudDemo() {
         "frustrating difficult confusing complicated inconvenient"
     };
     
+    // Create an instance of the AsciiWordCloud
+    nlp::AsciiWordCloud wordCloud;
+    
     // Basic word cloud generation
     std::cout << "\nGenerating basic positive word cloud:" << std::endl;
-    std::string positiveCloud = nlp::AsciiWordCloud::generateWordCloud(positiveTexts, 10, 60, 10, true);
+    std::string positiveCloud = wordCloud.generateWordCloud(positiveTexts, 10, 60, 10, true);
     std::cout << positiveCloud << std::endl;
     
     // Display negative word cloud with color
     std::cout << "\nDisplaying negative word cloud with color:" << std::endl;
-    nlp::AsciiWordCloud::displayWordCloud(negativeTexts, 10, 60, 10, false);
+    wordCloud.displayWordCloud(negativeTexts, 10, 60, 10, false);
     
     // Custom word cloud configuration
     nlp::AsciiWordCloud::CloudConfig customConfig;
@@ -59,7 +63,7 @@ void wordCloudDemo() {
     customConfig.showFrequencies = true;
     
     std::cout << "\nGenerating custom configured word cloud:" << std::endl;
-    std::string customCloud = nlp::AsciiWordCloud::generateCustomCloud(positiveTexts, customConfig, true);
+    std::string customCloud = wordCloud.generateCustomCloud(positiveTexts, customConfig, true);
     std::cout << customCloud << std::endl;
     
     // Save word cloud to file
@@ -72,7 +76,7 @@ void wordCloudDemo() {
         customConfig.height = 20;
         customConfig.maxWords = 15;
         
-        std::string fileCloud = nlp::AsciiWordCloud::generateCustomCloud(positiveTexts, customConfig, true);
+        std::string fileCloud = wordCloud.generateCustomCloud(positiveTexts, customConfig, true);
         outFile << fileCloud;
         outFile.close();
         
@@ -112,7 +116,7 @@ void wordCloudDemo() {
     customConfig.maxWords = 12;
     customConfig.useColor = false; // No color for combined cloud
     
-    std::string combinedCloud = nlp::AsciiWordCloud::generateCustomCloud(combinedTexts, customConfig, true);
+    std::string combinedCloud = wordCloud.generateCustomCloud(combinedTexts, customConfig, true);
     std::cout << combinedCloud << std::endl;
     
     std::cout << "==== Word Cloud Demo Complete ====" << std::endl;
@@ -121,7 +125,7 @@ void wordCloudDemo() {
 /**
  * Main function for the word cloud example application.
  * 
- * @return Exit status code
+ * @return Exit status code (0 for success, 1 for error)
  */
 int main() {
     try {

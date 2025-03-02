@@ -2,7 +2,7 @@
  * @file ascii_word_cloud.h
  * @brief Generates ASCII art word clouds from text data.
  * 
- * This module provides functionality to visualize word frequencies as
+ * This file provides functionality to visualize word frequencies as
  * ASCII art, with options for color, size, and different visualization
  * styles. It's useful for exploring the most frequent terms in text
  * collections.
@@ -41,9 +41,16 @@ public:
     };
 
     /**
+     * @brief Default constructor.
+     */
+    AsciiWordCloud() = default;
+
+    /**
      * @brief Generates an ASCII word cloud from the given text collection.
      * 
-     * This function generates a simple ASCII word cloud with default settings.
+     * This function takes a collection of text inputs and generates an ASCII-based 
+     * word cloud representation. The cloud includes the most frequent words, 
+     * formatted for visualization in a terminal.
      * 
      * @param texts A vector of text inputs to be analyzed.
      * @param maxWords The maximum number of words to include in the word cloud.
@@ -52,7 +59,7 @@ public:
      * @param isPositive Determines whether this is a positive sentiment cloud (affects styling).
      * @return A formatted string representing the ASCII word cloud.
      */
-    static std::string generateWordCloud(
+    std::string generateWordCloud(
         const std::vector<std::string>& texts,
         size_t maxWords = 30, 
         size_t width = 80, 
@@ -62,15 +69,15 @@ public:
     /**
      * @brief Generates a customized ASCII word cloud.
      * 
-     * This function provides more control over word cloud generation
-     * with a configuration struct for advanced settings.
+     * This method provides more control over the word cloud generation
+     * through a configuration struct that allows setting various parameters.
      * 
-     * @param texts A vector of text inputs to be analyzed.
+     * @param texts Collection of text documents to analyze.
      * @param config Configuration options for the word cloud.
-     * @param isPositive Determines sentiment-based styling.
-     * @return A formatted string representing the ASCII word cloud.
+     * @param isPositive Whether to use positive sentiment styling.
+     * @return A string containing the customized ASCII word cloud.
      */
-    static std::string generateCustomCloud(
+    std::string generateCustomCloud(
         const std::vector<std::string>& texts,
         const CloudConfig& config,
         bool isPositive = true);
@@ -78,8 +85,8 @@ public:
     /**
      * @brief Displays an ASCII word cloud in the console with color formatting.
      * 
-     * This function renders a word cloud directly in the console,
-     * applying ANSI colors based on sentiment.
+     * This function renders a word cloud directly in the console, applying 
+     * ANSI colors based on sentiment.
      * 
      * @param texts A vector of text inputs to be analyzed.
      * @param maxWords The maximum number of words to include in the word cloud.
@@ -87,7 +94,7 @@ public:
      * @param height The height of the ASCII word cloud.
      * @param isPositive Determines whether this is a positive sentiment cloud (affects styling).
      */
-    static void displayWordCloud(
+    void displayWordCloud(
         const std::vector<std::string>& texts,
         size_t maxWords = 30, 
         size_t width = 80, 
@@ -104,7 +111,7 @@ private:
      * @param texts A vector of text inputs to be analyzed.
      * @return A map of words and their respective frequencies.
      */
-    static std::unordered_map<std::string, int> countWordFrequencies(
+    std::unordered_map<std::string, int> countWordFrequencies(
         const std::vector<std::string>& texts);
 
     /**
@@ -116,7 +123,7 @@ private:
      * @param maxWords The maximum number of top words to extract.
      * @return A sorted vector of (word, frequency) pairs.
      */
-    static std::vector<std::pair<std::string, int>> getTopWords(
+    std::vector<std::pair<std::string, int>> getTopWords(
         const std::unordered_map<std::string, int>& wordFreqs, 
         size_t maxWords);
 
@@ -132,7 +139,7 @@ private:
      * @param isPositive Whether this is for a positive sentiment cloud.
      * @return A formatted word string.
      */
-    static std::string formatWord(
+    std::string formatWord(
         const std::string& word, 
         int freq, 
         int maxFreq,
@@ -146,14 +153,14 @@ private:
      * @param isPositive Whether this is for a positive sentiment cloud.
      * @return A string containing the ANSI color code.
      */
-    static std::string getColorCode(int freq, int maxFreq, bool isPositive);
+    std::string getColorCode(int freq, int maxFreq, bool isPositive);
 
     /**
      * @brief Resets the ANSI color formatting.
      * 
      * @return A string containing the ANSI reset code.
      */
-    static std::string resetColor();
+    std::string resetColor();
 };
 
 } // namespace nlp

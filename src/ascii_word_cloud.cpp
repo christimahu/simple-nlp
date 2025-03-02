@@ -118,7 +118,7 @@ std::string AsciiWordCloud::generateCustomCloud(
             cloud << "\n";
         }
     } else {
-        // Free-form cloud style (simplified version)
+        // Free-form cloud style
         cloud << "Top Words:\n";
         for (const auto& [word, freq] : topWords) {
             cloud << formatWord(word, freq, maxFreq, isPositive);
@@ -178,7 +178,7 @@ std::unordered_map<std::string, int> AsciiWordCloud::countWordFrequencies(
     
     // Process each text
     for (const auto& text : texts) {
-        std::istringstream iss(text);
+        std::istringstream iss{text};
         std::string word;
         
         // Count each word
